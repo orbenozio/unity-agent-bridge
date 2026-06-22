@@ -13,7 +13,8 @@ public static class GameBoot
         var player = GameObject.Find("Player");
 
         // BUG: dereferencing a null GameObject throws NullReferenceException.
-        // FIX (live): if (player == null) { Debug.LogWarning("No Player in scene"); return; }
-        Debug.Log("Spawning player at " + player.transform.position);
+        // FIX (live): 
+        if (player == null) { Debug.LogWarning("No Player in scene"); return; }
+        //Debug.Log("Spawning player at " + player.transform.position);
     }
 }
