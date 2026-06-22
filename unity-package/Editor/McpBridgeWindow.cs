@@ -169,7 +169,12 @@ namespace UnityMcpBridge.Editor
 
         private void DrawActivity()
         {
-            EditorGUILayout.LabelField("Recent activity", EditorStyles.boldLabel);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField("Recent activity", EditorStyles.boldLabel);
+                if (GUILayout.Button("Clear", EditorStyles.miniButton, GUILayout.Width(54)))
+                    McpBridge.ClearActivity();
+            }
             var log = McpBridge.RecentActivity;
             _logScroll = EditorGUILayout.BeginScrollView(_logScroll, GUILayout.ExpandHeight(true));
             if (log.Length == 0)

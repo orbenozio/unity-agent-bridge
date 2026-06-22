@@ -131,6 +131,11 @@ namespace UnityMcpBridge.Editor
             get { lock (_logLock) return _recent.ToArray(); }
         }
 
+        public static void ClearActivity()
+        {
+            lock (_logLock) _recent.Clear();
+        }
+
         private static void LogActivity(string tool)
         {
             lock (_logLock)
