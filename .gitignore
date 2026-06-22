@@ -1,0 +1,30 @@
+# .NET
+bin/
+obj/
+*.user
+
+# Unity (demo-unity-project)
+demo-unity-project/[Ll]ibrary/
+demo-unity-project/[Tt]emp/
+demo-unity-project/[Oo]bj/
+demo-unity-project/[Bb]uild/
+demo-unity-project/[Bb]uilds/
+demo-unity-project/[Ll]ogs/
+demo-unity-project/[Uu]ser[Ss]ettings/
+demo-unity-project/[Mm]emoryCaptures/
+demo-unity-project/*.csproj
+demo-unity-project/*.sln
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vs/
+.idea/
+.vscode/
+*.swp
+
+# Claude / Agents hub - machine-specific junctions, not part of the project
+.claude/
+
+# Net working-time log (auto-measured via global hooks; also self-ignores)
+.timelog/
