@@ -23,6 +23,9 @@ Thumbs.db
 .vscode/
 *.swp
 
+# Logs (e.g. headless Unity batchmode logs used during development)
+*.log
+
 # Claude / Agents hub - machine-specific junctions, not part of the project
 .claude/
 

@@ -32,7 +32,30 @@ namespace UnityMcpBridge.Editor
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeReload;
 
             ConsoleTools.Install();   // ring buffer must capture logs from load onward
+            EnsureFastPlayMode();     // so run_playmode doesn't drop the socket on a domain reload
             StartServer();
+        }
+
+        // Entering Play Mode normally triggers a domain reload, which would wipe the
+        // bridge (and any in-flight request) mid-call. Disabling domain reload on play
+        // keeps the socket and static state alive so run_playmode returns one clean
+        // response. Script recompiles still reload the domain — handled separately.
+        private static void EnsureFastPlayMode()
+        {
+            try
+            {
+                if (!EditorSettings.enterPlayModeOptionsEnabled ||
+                    (EditorSettings.enterPlayModeOptions & EnterPlayModeOptions.DisableDomainReload) == 0)
+                {
+                    EditorSettings.enterPlayModeOptionsEnabled = true;
+                    EditorSettings.enterPlayModeOptions = EnterPlayModeOptions.DisableDomainReload;
+                    Debug.Log("[McpBridge] enabled Enter Play Mode Options (Disable Domain Reload).");
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[McpBridge] could not set Enter Play Mode Options: " + e.Message);
+            }
         }
 
         // The bootstrap tool. Every other capability is just another [McpTool]
@@ -72,10 +95,10 @@ namespace UnityMcpBridge.Editor
         {
             _mainThreadJobs.Enqueue(() =>
             {
-                string response;
-                try { response = ToolRegistry.Invoke(json); }
-                catch (Exception e) { response = Protocol.Error("", e.ToString()); }
-                reply(response);
+                // ToolRegistry replies via `reply` — immediately for sync tools, or later
+                // (from a callback) for async tools that take an McpToolContext.
+                try { ToolRegistry.Invoke(json, reply); }
+                catch (Exception e) { reply(Protocol.Error("", e.ToString())); }
             });
         }
 

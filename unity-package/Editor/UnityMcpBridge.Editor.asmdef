@@ -1,7 +1,10 @@
 {
   "name": "UnityMcpBridge.Editor",
   "rootNamespace": "UnityMcpBridge.Editor",
-  "references": [],
+  "references": [
+    "UnityEditor.TestRunner",
+    "UnityEngine.TestRunner"
+  ],
   "includePlatforms": [
     "Editor"
   ],

@@ -48,27 +48,40 @@ namespace UnityMcpBridge.Editor
             _tools = map;
         }
 
-        /// <summary>Invoke the tool named in the request and return the JSON response string.</summary>
-        public static string Invoke(string requestJson)
+        /// <summary>
+        /// Parse the request, bind args, invoke the tool, and reply via <paramref name="reply"/>.
+        /// Synchronous tools reply with their return value; async tools that take an
+        /// McpToolContext reply later via ctx.Complete/ctx.Fail (this method returns first).
+        /// </summary>
+        public static void Invoke(string requestJson, Action<string> reply)
         {
             string id = "";
+            McpToolContext ctx = null;
+            bool deferred = false;
             try
             {
                 var root = JObject.Parse(requestJson);
                 id = (string)root["id"] ?? "";
+                ctx = new McpToolContext(id, reply);
+
                 var toolName = (string)root["tool"];
-                if (string.IsNullOrEmpty(toolName))
-                    return Protocol.Error(id, "missing tool");
+                if (string.IsNullOrEmpty(toolName)) { ctx.Fail("missing tool"); return; }
 
                 EnsureScanned();
-                if (!_tools.TryGetValue(toolName, out var tool))
-                    return Protocol.Error(id, $"unknown tool: {toolName}");
+                if (!_tools.TryGetValue(toolName, out var tool)) { ctx.Fail($"unknown tool: {toolName}"); return; }
 
                 var args = root["args"] as JObject ?? new JObject();
                 var values = new object[tool.Params.Length];
                 for (int i = 0; i < tool.Params.Length; i++)
                 {
                     var p = tool.Params[i];
+                    if (p.ParameterType == typeof(McpToolContext))
+                    {
+                        values[i] = ctx;       // injected, not bound from args
+                        deferred = true;
+                        continue;
+                    }
+
                     var token = args[p.Name];
                     if (token == null || token.Type == JTokenType.Null)
                     {
@@ -83,17 +96,20 @@ namespace UnityMcpBridge.Editor
                 }
 
                 var result = tool.Method.Invoke(null, values);
-                var resultJson = JsonConvert.SerializeObject(result ?? new { });
-                return Protocol.Ok(id, resultJson);
+
+                // Async tools own the reply; sync tools reply with their return value now.
+                if (!deferred)
+                    ctx.Complete(result);
             }
             catch (TargetInvocationException tie)
             {
                 // Unwrap so Claude sees the real tool exception + stack trace.
-                return Protocol.Error(id, (tie.InnerException ?? tie).ToString());
+                var msg = (tie.InnerException ?? tie).ToString();
+                if (ctx != null) ctx.Fail(msg); else reply(Protocol.Error(id, msg));
             }
             catch (Exception e)
             {
-                return Protocol.Error(id, e.ToString());
+                if (ctx != null) ctx.Fail(e.ToString()); else reply(Protocol.Error(id, e.ToString()));
             }
         }
     }

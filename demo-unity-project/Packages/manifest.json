@@ -2,6 +2,7 @@
   "dependencies": {
     "com.webinar.unity-mcp-bridge": "file:../../unity-package",
     "com.unity.nuget.newtonsoft-json": "3.2.1",
+    "com.unity.test-framework": "1.6.0",
     "com.unity.modules.imgui": "1.0.0",
     "com.unity.modules.jsonserialize": "1.0.0",
     "com.unity.modules.ui": "1.0.0",

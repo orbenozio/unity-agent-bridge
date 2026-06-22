@@ -19,7 +19,13 @@ public enum ConnectionState { Connected, Reconnecting, Down }
 public sealed class UnityClient : IAsyncDisposable
 {
     private const string Url = "ws://127.0.0.1:17890";
-    private static readonly TimeSpan CallTimeout = TimeSpan.FromSeconds(30);
+
+    // How long a call will PARK while (re)connecting before giving up — covers a
+    // domain reload (script recompile) where Unity briefly tears the socket down.
+    private static readonly TimeSpan ConnectParkTimeout = TimeSpan.FromSeconds(20);
+    // How long to wait for Unity's response once connected. Generous because
+    // run_tests / run_playmode are intentionally long-running.
+    private static readonly TimeSpan ResponseTimeout = TimeSpan.FromSeconds(120);
 
     private readonly ConcurrentDictionary<string, TaskCompletionSource<string>> _pending = new();
     private readonly SemaphoreSlim _sendLock = new(1, 1);
@@ -45,7 +51,7 @@ public sealed class UnityClient : IAsyncDisposable
             await SendTextAsync(envelope, ct);
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(CallTimeout);
+            timeout.CancelAfter(ResponseTimeout);
             using (timeout.Token.Register(static s =>
             {
                 ((TaskCompletionSource<string>)s!).TrySetException(
@@ -63,6 +69,9 @@ public sealed class UnityClient : IAsyncDisposable
 
     // --- connection --------------------------------------------------------
 
+    // Park-and-reconnect: retry with exponential backoff (250ms -> 4s, capped) until
+    // connected or ConnectParkTimeout elapses. This is what makes a tool call survive
+    // a mid-session script recompile (the socket drops and comes back a moment later).
     private async Task EnsureConnectedAsync(CancellationToken ct)
     {
         if (_ws is { State: WebSocketState.Open }) return;
@@ -70,31 +79,52 @@ public sealed class UnityClient : IAsyncDisposable
         await _connectLock.WaitAsync(ct);
         try
         {
-            if (_ws is { State: WebSocketState.Open }) return;
+            var deadline = DateTime.UtcNow + ConnectParkTimeout;
+            var delayMs = 250;
+            Exception? last = null;
 
-            _receiveCts?.Cancel();
-            _ws?.Dispose();
-
-            var ws = new ClientWebSocket();
-            try
+            while (true)
             {
-                await ws.ConnectAsync(new Uri(Url), ct);
-            }
-            catch (Exception e)
-            {
-                State = ConnectionState.Down;
-                ws.Dispose();
-                throw new InvalidOperationException(
-                    $"Could not connect to the Unity bridge at {Url}. " +
-                    "Is the Unity 6 Editor open with the unity-mcp-bridge package loaded? " +
-                    $"({e.Message})");
-            }
+                if (_ws is { State: WebSocketState.Open }) return;
+                ct.ThrowIfCancellationRequested();
 
-            _ws = ws;
-            State = ConnectionState.Connected;
-            _receiveCts = new CancellationTokenSource();
-            _ = Task.Run(() => ReceiveLoopAsync(ws, _receiveCts.Token));
-            Log($"connected to Unity bridge at {Url}");
+                _receiveCts?.Cancel();
+                _ws?.Dispose();
+                _ws = null;
+
+                var ws = new ClientWebSocket();
+                try
+                {
+                    using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    connectCts.CancelAfter(TimeSpan.FromSeconds(5));
+                    await ws.ConnectAsync(new Uri(Url), connectCts.Token);
+
+                    _ws = ws;
+                    State = ConnectionState.Connected;
+                    _receiveCts = new CancellationTokenSource();
+                    _ = Task.Run(() => ReceiveLoopAsync(ws, _receiveCts.Token));
+                    Log($"connected to Unity bridge at {Url}");
+                    return;
+                }
+                catch (Exception e)
+                {
+                    last = e;
+                    ws.Dispose();
+                    State = ConnectionState.Reconnecting;
+
+                    if (DateTime.UtcNow >= deadline)
+                    {
+                        State = ConnectionState.Down;
+                        throw new InvalidOperationException(
+                            $"Could not connect to the Unity bridge at {Url} within {ConnectParkTimeout.TotalSeconds:0}s. " +
+                            "Is the Unity 6 Editor open with the unity-mcp-bridge package loaded? " +
+                            $"({last.Message})");
+                    }
+
+                    await Task.Delay(Math.Min(delayMs, 4000), ct);
+                    delayMs = Math.Min(delayMs * 2, 4000);
+                }
+            }
         }
         finally
         {
