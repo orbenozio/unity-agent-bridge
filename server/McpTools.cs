@@ -66,4 +66,12 @@ public class UnityMcpTools(UnityClient unity)
     [McpServerTool, Description("List the active scene hierarchy (names + components), depth-limited and terse.")]
     public Task<string> list_scene(int maxDepth = 4)
         => unity.CallAsync("list_scene", new { maxDepth });
+
+    [McpServerTool, Description("Save the active scene to disk (gives an unsaved scene a path so it survives Play Mode). Optional asset path.")]
+    public Task<string> save_scene(string? path = null)
+        => unity.CallAsync("save_scene", new { path });
+
+    [McpServerTool, Description("Inspect a GameObject by name or instanceId: transform + each component's serialized properties (capped).")]
+    public Task<string> get_object(string target)
+        => unity.CallAsync("get_object", new { target });
 }

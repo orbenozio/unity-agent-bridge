@@ -141,7 +141,99 @@ namespace UnityMcpBridge.Editor.Tools
             return new { scene = scene.name, rootCount = roots.Length, hierarchy = tree };
         }
 
+        [McpTool("save_scene", "Save the active scene to disk (gives an unsaved scene a path so it survives Play Mode).")]
+        public static object SaveScene(
+            [Param("Optional asset path, e.g. Assets/Scenes/Main.unity.")] string path = null)
+        {
+            var scene = SceneManager.GetActiveScene();
+            var target = !string.IsNullOrEmpty(path)
+                ? path
+                : (string.IsNullOrEmpty(scene.path) ? "Assets/Scenes/Main.unity" : scene.path);
+
+            var dir = System.IO.Path.GetDirectoryName(target);
+            if (!string.IsNullOrEmpty(dir) && !System.IO.Directory.Exists(dir))
+                System.IO.Directory.CreateDirectory(dir);
+
+            var ok = EditorSceneManager.SaveScene(scene, target);
+            AssetDatabase.Refresh();
+            return new { saved = ok, path = scene.path, name = scene.name };
+        }
+
+        [McpTool("get_object", "Inspect a GameObject: transform + each component's serialized properties (capped).")]
+        public static object GetObject(
+            [Param("Target: name or instanceId.")] string target)
+        {
+            var go = Resolve(target);
+            var comps = new List<object>();
+            foreach (var c in go.GetComponents<Component>())
+            {
+                if (c == null || c is Transform) continue;
+                comps.Add(new { type = c.GetType().Name, properties = DumpProps(c) });
+            }
+
+            object xform;
+            var t = go.transform;
+            if (t is RectTransform rt)
+                xform = new { kind = "RectTransform", anchoredPosition = V2(rt.anchoredPosition), sizeDelta = V2(rt.sizeDelta), anchorMin = V2(rt.anchorMin), anchorMax = V2(rt.anchorMax), pivot = V2(rt.pivot) };
+            else
+                xform = new { kind = "Transform", position = V3(t.position), localPosition = V3(t.localPosition), eulerAngles = V3(t.eulerAngles), localScale = V3(t.localScale) };
+
+            return new
+            {
+                name = go.name,
+                active = go.activeSelf,
+                layer = LayerMask.LayerToName(go.layer),
+                tag = go.tag,
+                transform = xform,
+                components = comps,
+            };
+        }
+
         // --- helpers -----------------------------------------------------------
+
+        private static Dictionary<string, object> DumpProps(Component c)
+        {
+            var d = new Dictionary<string, object>();
+            var so = new SerializedObject(c);
+            var it = so.GetIterator();
+            int count = 0;
+            if (it.NextVisible(true))
+            {
+                do
+                {
+                    if (it.name == "m_Script") continue;
+                    var val = PropVal(it);
+                    if (val != null) { d[it.name] = val; count++; }
+                } while (count < 30 && it.NextVisible(false));
+            }
+            return d;
+        }
+
+        private static object PropVal(SerializedProperty p)
+        {
+            switch (p.propertyType)
+            {
+                case SerializedPropertyType.Integer: return p.intValue;
+                case SerializedPropertyType.Boolean: return p.boolValue;
+                case SerializedPropertyType.Float: return p.floatValue;
+                case SerializedPropertyType.String: return p.stringValue;
+                case SerializedPropertyType.Enum:
+                    return p.enumValueIndex >= 0 && p.enumValueIndex < p.enumDisplayNames.Length
+                        ? p.enumDisplayNames[p.enumValueIndex] : p.enumValueIndex;
+                case SerializedPropertyType.Color:
+                    var c = p.colorValue;
+                    return $"({c.r:0.##},{c.g:0.##},{c.b:0.##},{c.a:0.##})";
+                case SerializedPropertyType.ObjectReference:
+                    return p.objectReferenceValue != null ? p.objectReferenceValue.name : null;
+                case SerializedPropertyType.Vector2: return V2(p.vector2Value);
+                case SerializedPropertyType.Vector3: return V3(p.vector3Value);
+                case SerializedPropertyType.LayerMask: return p.intValue;
+                default: return null; // skip complex/nested
+            }
+        }
+
+        private static object V2(Vector2 v) => new { x = v.x, y = v.y };
+        private static object V3(Vector3 v) => new { x = v.x, y = v.y, z = v.z };
 
         private static object Node(GameObject go, int depth, int maxDepth)
         {
