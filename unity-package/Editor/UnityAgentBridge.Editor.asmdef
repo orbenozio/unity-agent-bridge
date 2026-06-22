@@ -1,6 +1,6 @@
 {
-  "name": "UnityMcpBridge.Editor",
-  "rootNamespace": "UnityMcpBridge.Editor",
+  "name": "UnityAgentBridge.Editor",
+  "rootNamespace": "UnityAgentBridge.Editor",
   "references": [
     "UnityEditor.TestRunner",
     "UnityEngine.TestRunner",

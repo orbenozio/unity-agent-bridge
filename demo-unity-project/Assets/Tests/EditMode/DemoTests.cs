@@ -11,8 +11,8 @@ public class DemoTests
     }
 
     [Test]
-    public void ProjectName_ContainsMcp()
+    public void ProjectName_ContainsAgent()
     {
-        Assert.IsTrue("unity-mcp-bridge".Contains("mcp"));
+        Assert.IsTrue("unity-agent-bridge".Contains("agent"));
     }
 }

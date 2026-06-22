@@ -1,4 +1,4 @@
-# SPEC — `unity-mcp-bridge`
+# SPEC — `unity-agent-bridge`
 
 A **minimal-yet-real** MCP server that connects **Claude Code** to the **Unity 6
 Editor**, built for a live webinar and extensible into a genuine tool.
@@ -161,7 +161,7 @@ Lives in `unity-package/` and is installed into the demo project's `Packages/`.
 ### Files
 ```
 unity-package/
-├─ package.json                     # UPM manifest: com.webinar.unity-mcp-bridge
+├─ package.json                     # UPM manifest: com.webinar.unity-agent-bridge
 ├─ Editor/
 │  ├─ McpBridge.cs                  # lifecycle, WS server, main-thread pump, dispatch
 │  ├─ McpToolAttribute.cs           # [McpTool] + [Param] attributes
@@ -340,7 +340,7 @@ v1 ships **6 tools** — fine. The growth plan (documented now, not built):
 ## 10. Repo layout
 
 ```
-unity-mcp-bridge/
+unity-agent-bridge/
 ├─ SPEC.md                  ← this file
 ├─ README.md               ← quickstart: build server, install package, claude mcp add
 ├─ CLAUDE.md               ← conventions for Claude Code working IN this repo
@@ -368,7 +368,7 @@ dotnet build                      # restores ModelContextProtocol, builds net8.0
 #    Console should print: "[McpBridge] listening on ws://127.0.0.1:17890"
 
 # 3. Register with Claude Code
-claude mcp add unity-mcp-bridge -- dotnet run --project /abs/path/server
+claude mcp add unity-agent-bridge -- dotnet run --project /abs/path/server
 
 # 4. In Claude Code:
 #    > read the unity console

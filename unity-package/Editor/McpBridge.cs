@@ -17,9 +17,9 @@ using System.Text;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
-using UnityMcpBridge.Editor.Tools;
+using UnityAgentBridge.Editor.Tools;
 
-namespace UnityMcpBridge.Editor
+namespace UnityAgentBridge.Editor
 {
     [InitializeOnLoad]
     public static class McpBridge

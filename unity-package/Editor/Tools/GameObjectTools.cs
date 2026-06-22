@@ -8,9 +8,9 @@ using System.Reflection;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
-using UnityMcpBridge.Editor;
+using UnityAgentBridge.Editor;
 
-namespace UnityMcpBridge.Editor.Tools
+namespace UnityAgentBridge.Editor.Tools
 {
     public static class GameObjectTools
     {

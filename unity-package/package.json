@@ -1,7 +1,7 @@
 {
-  "name": "com.webinar.unity-mcp-bridge",
+  "name": "com.webinar.unity-agent-bridge",
   "version": "0.1.0",
-  "displayName": "Unity MCP Bridge",
+  "displayName": "Unity Agent Bridge",
   "description": "Minimal Editor-side bridge that lets an external MCP server (and Claude Code) drive the Unity 6 Editor over WebSocket. Webinar demo.",
   "unity": "6000.0",
   "keywords": ["mcp", "claude", "ai", "editor", "automation"],

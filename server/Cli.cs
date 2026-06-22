@@ -3,15 +3,15 @@
 // Same binary as the MCP server: launched with NO args it is an MCP stdio server
 // (for Claude); launched WITH args it runs a single tool call and prints the result.
 //
-//   unity-bridge ping
-//   unity-bridge create_gameobject name=Cube primitive=Cube
-//   unity-bridge set_property target=QuitButton componentType=Image property=color value={"r":0,"g":1,"b":0,"a":1}
-//   unity-bridge list
-//   unity-bridge --port 17890 list
+//   unity-agent-bridge ping
+//   unity-agent-bridge create_gameobject name=Cube primitive=Cube
+//   unity-agent-bridge set_property target=QuitButton componentType=Image property=color value={"r":0,"g":1,"b":0,"a":1}
+//   unity-agent-bridge list
+//   unity-agent-bridge --port 17890 list
 
 using System.Text.Json;
 
-namespace UnityMcpBridge;
+namespace UnityAgentBridge;
 
 internal static class Cli
 {
@@ -112,19 +112,19 @@ internal static class Cli
     private static void PrintHelp()
     {
         Console.WriteLine(
-@"unity-bridge — CLI for the Unity MCP bridge
+@"unity-agent-bridge — CLI for the Unity MCP bridge
 
 USAGE
-  unity-bridge [--port N] <tool> [key=value ...]
-  unity-bridge [--port N] list           list every tool and its parameters
-  unity-bridge --help
+  unity-agent-bridge [--port N] <tool> [key=value ...]
+  unity-agent-bridge [--port N] list           list every tool and its parameters
+  unity-agent-bridge --help
 
 EXAMPLES
-  unity-bridge ping
-  unity-bridge create_gameobject name=Cube primitive=Cube
-  unity-bridge add_component target=Cube componentType=Rigidbody
-  unity-bridge set_property target=Cube componentType=Image property=color value={""r"":0,""g"":1,""b"":0,""a"":1}
-  unity-bridge list_scene maxDepth=3
+  unity-agent-bridge ping
+  unity-agent-bridge create_gameobject name=Cube primitive=Cube
+  unity-agent-bridge add_component target=Cube componentType=Rigidbody
+  unity-agent-bridge set_property target=Cube componentType=Image property=color value={""r"":0,""g"":1,""b"":0,""a"":1}
+  unity-agent-bridge list_scene maxDepth=3
 
 NOTES
   - Values that look like JSON ({...}/[...]) or numbers/bools are sent as-is; anything

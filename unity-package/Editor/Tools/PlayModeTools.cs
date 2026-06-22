@@ -10,9 +10,9 @@ using System;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
-using UnityMcpBridge.Editor;
+using UnityAgentBridge.Editor;
 
-namespace UnityMcpBridge.Editor.Tools
+namespace UnityAgentBridge.Editor.Tools
 {
     public static class PlayModeTools
     {

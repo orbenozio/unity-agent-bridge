@@ -6,7 +6,7 @@
 
 using System;
 
-namespace UnityMcpBridge.Editor
+namespace UnityAgentBridge.Editor
 {
     [AttributeUsage(AttributeTargets.Method)]
     public sealed class McpToolAttribute : Attribute

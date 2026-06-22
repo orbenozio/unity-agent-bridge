@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "com.webinar.unity-mcp-bridge": "file:../../unity-package",
+    "com.webinar.unity-agent-bridge": "file:../../unity-package",
     "com.unity.nuget.newtonsoft-json": "3.2.1",
     "com.unity.test-framework": "1.6.0",
     "com.unity.ugui": "2.0.0",

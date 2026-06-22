@@ -12,9 +12,9 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
-using UnityMcpBridge.Editor;
+using UnityAgentBridge.Editor;
 
-namespace UnityMcpBridge.Editor.Tools
+namespace UnityAgentBridge.Editor.Tools
 {
     public static class SceneTools
     {

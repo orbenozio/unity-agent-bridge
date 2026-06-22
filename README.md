@@ -1,4 +1,4 @@
-# unity-mcp-bridge
+# unity-agent-bridge
 
 A **minimal-yet-real** [MCP](https://modelcontextprotocol.io) server connecting
 **Claude Code** to the **Unity 6 Editor**. Built for a live webinar — small enough to
@@ -34,7 +34,7 @@ cd server && dotnet build
 #    Console should show: [McpBridge] listening on ws://127.0.0.1:17890
 
 # 3. Register with Claude Code
-claude mcp add unity-mcp-bridge -- dotnet run --project "$(pwd)/server"
+claude mcp add unity-agent-bridge -- dotnet run --project "$(pwd)/server"
 
 # 4. Try it in Claude Code
 #    > read the unity console

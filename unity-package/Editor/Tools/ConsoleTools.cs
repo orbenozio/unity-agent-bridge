@@ -8,9 +8,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using UnityMcpBridge.Editor;
+using UnityAgentBridge.Editor;
 
-namespace UnityMcpBridge.Editor.Tools
+namespace UnityAgentBridge.Editor.Tools
 {
     public static class ConsoleTools
     {

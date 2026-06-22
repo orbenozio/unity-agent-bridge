@@ -1,4 +1,4 @@
-# MILESTONES — build plan for `unity-mcp-bridge`
+# MILESTONES — build plan for `unity-agent-bridge`
 
 A phased, checkable plan. Each milestone is **independently demoable** and ends with a
 working end-to-end slice. Build top to bottom. See [`SPEC.md`](./SPEC.md) for detail.

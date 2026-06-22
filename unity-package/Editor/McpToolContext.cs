@@ -9,7 +9,7 @@
 using System.Threading;
 using Newtonsoft.Json;
 
-namespace UnityMcpBridge.Editor
+namespace UnityAgentBridge.Editor
 {
     public sealed class McpToolContext
     {

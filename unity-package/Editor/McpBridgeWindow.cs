@@ -1,13 +1,13 @@
 // McpBridgeWindow.cs — the in-Editor control panel for the bridge.
 //
-// Window > Unity MCP Bridge. Live status; set the port; start/stop/restart; an
+// Window > Unity Agent Bridge. Live status; set the port; start/stop/restart; an
 // allow-list of tools (checkbox = permitted, description on hover as a tooltip);
 // a draggable splitter to trade space between the tool list and recent activity.
 
 using UnityEditor;
 using UnityEngine;
 
-namespace UnityMcpBridge.Editor
+namespace UnityAgentBridge.Editor
 {
     public class McpBridgeWindow : EditorWindow
     {
@@ -22,10 +22,10 @@ namespace UnityMcpBridge.Editor
         private GUIStyle _disabledLabel;
         private Texture _infoIcon;
 
-        [MenuItem("Window/Unity MCP Bridge")]
+        [MenuItem("Window/Unity Agent Bridge")]
         public static void Open()
         {
-            var w = GetWindow<McpBridgeWindow>("MCP Bridge");
+            var w = GetWindow<McpBridgeWindow>("Agent Bridge");
             w.minSize = new Vector2(360, 460);
             w.Show();
         }
@@ -102,10 +102,10 @@ namespace UnityMcpBridge.Editor
 
         private void DrawCliHints()
         {
-            EditorGUILayout.LabelField("CLI  (run unity-bridge.cmd from the repo root)", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("CLI  (run unity-agent-bridge.cmd from the repo root)", EditorStyles.boldLabel);
             var portArg = McpBridge.Port == McpBridge.DefaultPort ? "" : $"--port {McpBridge.Port} ";
-            CopyableRow($"unity-bridge {portArg}ping");
-            CopyableRow($"unity-bridge {portArg}list");
+            CopyableRow($"unity-agent-bridge {portArg}ping");
+            CopyableRow($"unity-agent-bridge {portArg}list");
         }
 
         private void DrawToolsHeader()

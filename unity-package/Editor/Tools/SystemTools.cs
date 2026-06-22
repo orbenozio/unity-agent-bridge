@@ -1,9 +1,9 @@
 // SystemTools.cs — bridge self-description tools.
 
 using UnityEngine;
-using UnityMcpBridge.Editor;
+using UnityAgentBridge.Editor;
 
-namespace UnityMcpBridge.Editor.Tools
+namespace UnityAgentBridge.Editor.Tools
 {
     public static class SystemTools
     {

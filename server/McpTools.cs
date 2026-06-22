@@ -8,7 +8,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
 
-namespace UnityMcpBridge;
+namespace UnityAgentBridge;
 
 [McpServerToolType]
 public class UnityMcpTools(UnityClient unity)

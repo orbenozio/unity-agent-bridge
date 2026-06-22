@@ -1,4 +1,4 @@
-# CLAUDE.md — unity-mcp-bridge
+# CLAUDE.md — unity-agent-bridge
 
 A teaching MCP server connecting **Claude Code** to the **Unity 6 Editor**. Read
 [`SPEC.md`](./SPEC.md) before changing architecture; it is the source of truth.
@@ -42,7 +42,7 @@ cd server && dotnet build
 dotnet run --project server          # launched by Claude via `claude mcp add`
 
 # Register with Claude Code
-claude mcp add unity-mcp-bridge -- dotnet run --project /abs/path/server
+claude mcp add unity-agent-bridge -- dotnet run --project /abs/path/server
 ```
 Unity side: open `demo-unity-project/` in Unity 6; the package auto-loads from
 `Packages/` (via a local file reference). Watch the Console for

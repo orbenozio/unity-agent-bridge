@@ -8,7 +8,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using UnityMcpBridge;
+using UnityAgentBridge;
 
 // --- CLI mode -----------------------------------------------------------------
 if (args.Length > 0)

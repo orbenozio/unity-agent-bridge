@@ -14,7 +14,7 @@ using System.Reflection;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace UnityMcpBridge.Editor
+namespace UnityAgentBridge.Editor
 {
     public static class ToolRegistry
     {
@@ -124,7 +124,7 @@ namespace UnityMcpBridge.Editor
 
                 EnsureScanned();
                 if (!_tools.TryGetValue(toolName, out var tool)) { ctx.Fail($"unknown tool: {toolName}"); return; }
-                if (!ToolGate.IsEnabled(toolName)) { ctx.Fail($"tool '{toolName}' is disabled in the Unity MCP Bridge window"); return; }
+                if (!ToolGate.IsEnabled(toolName)) { ctx.Fail($"tool '{toolName}' is disabled in the Unity Agent Bridge window"); return; }
 
                 var args = root["args"] as JObject ?? new JObject();
                 var values = new object[tool.Params.Length];

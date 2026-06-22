@@ -19,7 +19,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 
-namespace UnityMcpBridge.Editor
+namespace UnityAgentBridge.Editor
 {
     public sealed class WebSocketServer
     {

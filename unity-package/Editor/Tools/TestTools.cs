@@ -7,9 +7,9 @@
 using System;
 using System.Collections.Generic;
 using UnityEditor.TestTools.TestRunner.Api;
-using UnityMcpBridge.Editor;
+using UnityAgentBridge.Editor;
 
-namespace UnityMcpBridge.Editor.Tools
+namespace UnityAgentBridge.Editor.Tools
 {
     public static class TestTools
     {

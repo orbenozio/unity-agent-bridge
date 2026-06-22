@@ -1,6 +1,6 @@
 # CLAUDE.md - demo-unity-project
 
-The live-demo Unity 6 project driven by `unity-mcp-bridge`. You drive it through MCP
+The live-demo Unity 6 project driven by `unity-agent-bridge`. You drive it through MCP
 tools (read_console, create_gameobject, add_component, run_playmode, run_tests,
 unity_status) - not by editing the Editor by hand.
 

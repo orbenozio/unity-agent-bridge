@@ -1,6 +1,6 @@
 # Webinar run-of-show — "From terminal to a running Unity game"
 
-A ~40-minute arc demonstrating Claude Code driving Unity 6 through `unity-mcp-bridge`.
+A ~40-minute arc demonstrating Claude Code driving Unity 6 through `unity-agent-bridge`.
 Fill in timings to taste; the beats below are the spine.
 
 ## 0. Cold open (2 min)
@@ -45,7 +45,7 @@ Fill in timings to taste; the beats below are the spine.
 
 ## Pre-flight checklist
 - [ ] Unity 6 demo project open, bridge listening (`ws://127.0.0.1:17890`).
-- [ ] `claude mcp add unity-mcp-bridge` registered and green.
+- [ ] `claude mcp add unity-agent-bridge` registered and green.
 - [ ] Intentional bug present and reproducible.
 - [ ] `Enter Play Mode Settings → Reload Domain = off` for smooth Play Mode.
 - [ ] Font size up, Console visible, Hierarchy visible.

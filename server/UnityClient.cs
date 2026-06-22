@@ -12,7 +12,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 
-namespace UnityMcpBridge;
+namespace UnityAgentBridge;
 
 public enum ConnectionState { Connected, Reconnecting, Down }
 
@@ -120,7 +120,7 @@ public sealed class UnityClient : IAsyncDisposable
                         State = ConnectionState.Down;
                         throw new InvalidOperationException(
                             $"Could not connect to the Unity bridge at {_url} within {ConnectParkTimeout.TotalSeconds:0}s. " +
-                            "Is the Unity 6 Editor open with the unity-mcp-bridge package loaded? " +
+                            "Is the Unity 6 Editor open with the unity-agent-bridge package loaded? " +
                             $"({last.Message})");
                     }
 
@@ -209,7 +209,7 @@ public sealed class UnityClient : IAsyncDisposable
                 tcs.TrySetException(new InvalidOperationException("Unity bridge disconnected: " + reason));
     }
 
-    private static void Log(string msg) => Console.Error.WriteLine("[unity-mcp-bridge] " + msg);
+    private static void Log(string msg) => Console.Error.WriteLine("[unity-agent-bridge] " + msg);
 
     public async ValueTask DisposeAsync()
     {
