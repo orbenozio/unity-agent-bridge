@@ -10,7 +10,10 @@
 - [ ] M5 - ליטוש לוובינר (באג מכוון, טסטים, תסריט)
 
 ## In progress
-- [ ] M1 - הצינור: bridge עונה ל-`ping`, השרת מחזיר ל-Claude
 
 ## Done
+- [x] M1 - הצינור: ping עובר end-to-end. מאומת headless ב-Unity batchmode -
+      ה-package מתקמפל נקי, ה-bridge מאזין, ובדיקת WebSocket חיה החזירה
+      `{"ok":true,"result":{"pong":true,"unityVersion":"6000.3.7f1"}}`.
+      צד השרת: dotnet build נקי + MCP initialize/tools/list עובדים.
 - [x] M0 - Scaffolding (משיכת האפיון והשלד מ-GitHub, חיבור ל-Agents hub, git init)
