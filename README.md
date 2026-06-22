@@ -50,7 +50,9 @@ See [`SPEC.md`](./SPEC.md) for the full breakdown, wire protocol, and the main-t
 marshalling that makes it all work.
 
 ## Status
-🚧 Scaffold + spec. Implementation tracked in [`MILESTONES.md`](./MILESTONES.md).
+✅ All six tools implemented and verified against a live Unity 6000.3.7f1 Editor
+(M0–M5 complete). Per-milestone status in [`MILESTONES.md`](./MILESTONES.md);
+verification notes in [`TASKS.md`](./TASKS.md).
 
 ## License
 MIT. Not affiliated with Unity Technologies.
