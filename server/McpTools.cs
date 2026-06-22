@@ -5,7 +5,8 @@
 // `args` consumed by the matching [McpTool] method on the Unity side.
 
 using System.ComponentModel;
-using ModelContextProtocol.Server;   // TODO(M1): confirm namespace against the installed SDK version.
+using System.Text.Json;
+using ModelContextProtocol.Server;
 
 namespace UnityMcpBridge;
 
@@ -39,4 +40,30 @@ public class UnityMcpTools(UnityClient unity)
 
     [McpServerTool, Description("Report the live connection state between this server and the Unity Editor.")]
     public string unity_status() => unity.State.ToString();
+
+    // --- scene/UI editing (extension tools) ---------------------------------
+
+    [McpServerTool, Description("Reparent a GameObject under another (empty/null parent = scene root).")]
+    public Task<string> set_parent(string target, string? parent = null, bool keepWorldPosition = false)
+        => unity.CallAsync("set_parent", new { target, parent, keepWorldPosition });
+
+    [McpServerTool, Description("Set a UI RectTransform: anchored position (x,y), size (width,height), and optional anchor preset (center|top|stretch|...).")]
+    public Task<string> set_rect(string target, double x = 0, double y = 0, double width = 160, double height = 30, string? anchor = null)
+        => unity.CallAsync("set_rect", new { target, x, y, width, height, anchor });
+
+    [McpServerTool, Description("Set the label text of a UI Text on the target; creates a stretched child label (with a font) if none exists.")]
+    public Task<string> set_text(string target, string text)
+        => unity.CallAsync("set_text", new { target, text });
+
+    [McpServerTool, Description("Set any serialized property on a component (generic). property accepts aliases: color, text, fontSize, enabled, interactable. value is a number, bool, string, or {r,g,b,a}/{x,y,z}.")]
+    public Task<string> set_property(string target, string componentType, string property, JsonElement value)
+        => unity.CallAsync("set_property", new { target, componentType, property, value });
+
+    [McpServerTool, Description("Delete a GameObject by name or instanceId (Undo-able).")]
+    public Task<string> delete_gameobject(string target)
+        => unity.CallAsync("delete_gameobject", new { target });
+
+    [McpServerTool, Description("List the active scene hierarchy (names + components), depth-limited and terse.")]
+    public Task<string> list_scene(int maxDepth = 4)
+        => unity.CallAsync("list_scene", new { maxDepth });
 }

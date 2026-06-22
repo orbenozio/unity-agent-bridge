@@ -81,7 +81,7 @@ namespace UnityMcpBridge.Editor.Tools
 
         // --- helpers -----------------------------------------------------------
 
-        private static GameObject ResolveTarget(string target)
+        internal static GameObject ResolveTarget(string target)
         {
             if (string.IsNullOrEmpty(target)) return null;
 
@@ -98,7 +98,7 @@ namespace UnityMcpBridge.Editor.Tools
             return GameObject.Find(target);
         }
 
-        private static Type ResolveComponentType(string name)
+        internal static Type ResolveComponentType(string name)
         {
             // 1) common case: a UnityEngine component referenced by short name.
             var t = Type.GetType($"UnityEngine.{name}, UnityEngine") ??

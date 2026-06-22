@@ -89,6 +89,10 @@ namespace UnityMcpBridge.Editor
                             ? p.DefaultValue
                             : (p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null);
                     }
+                    else if (typeof(JToken).IsAssignableFrom(p.ParameterType))
+                    {
+                        values[i] = token; // pass raw JSON through (generic tools like set_property)
+                    }
                     else
                     {
                         values[i] = token.ToObject(p.ParameterType);
