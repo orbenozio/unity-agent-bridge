@@ -4,13 +4,15 @@
 תוכנית הבנייה המלאה ב-[MILESTONES.md](./MILESTONES.md).
 
 ## Todo
-- [ ] M3 - `create_gameobject` + `add_component`
 - [ ] M4 - `run_playmode` + `run_tests` + עמידות reload/reconnect
 - [ ] M5 - ליטוש לוובינר (באג מכוון, טסטים, תסריט)
 
 ## In progress
 
 ## Done
+- [x] M3 - `create_gameobject` (primitive/ריק) + `add_component`. פתרון יעד לפי
+      שם או instanceId, פתרון טיפוס רכיב על פני האסמבליות, Undo. מאומת חי: cube
+      "Player" + Rigidbody (לפי שם) + BoxCollider (לפי instanceId), ו-Light ל-GO ריק.
 - [x] M2 - `read_console` + `ToolRegistry` (reflection scan) + ring buffer.
       `ping` אוחד גם הוא ל-`[McpTool]`; serialization דרך Newtonsoft. מאומת חי:
       read_console levels=[Error] החזיר את ה-Debug.LogError עם stack trace מלא.
