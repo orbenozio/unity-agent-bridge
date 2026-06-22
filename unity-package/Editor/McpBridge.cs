@@ -1,16 +1,20 @@
 // McpBridge.cs — Editor lifecycle, WebSocket server, main-thread pump, dispatch.
 //
 // This is the HEART of the project (SPEC §3, §4, §6). It:
-//   - Starts a WebSocket server on ws://127.0.0.1:17890 when the Editor loads.
+//   - Starts a WebSocket server on ws://127.0.0.1:<port> when the Editor loads.
 //   - Receives requests on a background thread and ENQUEUES them.
 //   - Drains the queue on EditorApplication.update — i.e. the MAIN THREAD —
 //     because nearly all Unity APIs require it.
 //   - Tears down cleanly before a domain reload so the socket/port is released;
 //     [InitializeOnLoad] re-runs this ctor on the new domain and restarts it.
+//
+// Status, port config and a recent-activity log are exposed for the Editor window.
 
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Text;
+using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityMcpBridge.Editor.Tools;
@@ -20,11 +24,24 @@ namespace UnityMcpBridge.Editor
     [InitializeOnLoad]
     public static class McpBridge
     {
-        private const string Host = "127.0.0.1";
-        private const int Port = 17890;
+        public const string Host = "127.0.0.1";
+        public const int DefaultPort = 17890;
+        private const string PortPrefKey = "McpBridge.Port";
 
         private static readonly ConcurrentQueue<Action> _mainThreadJobs = new();
+        private static readonly object _logLock = new object();
+        private static readonly List<string> _recent = new List<string>();
         private static WebSocketServer _server;
+
+        /// <summary>Configured listen port (persisted in EditorPrefs).</summary>
+        public static int Port
+        {
+            get => EditorPrefs.GetInt(PortPrefKey, DefaultPort);
+            private set => EditorPrefs.SetInt(PortPrefKey, value);
+        }
+
+        public static bool IsListening { get; private set; }
+        public static bool ClientConnected => _server != null && _server.HasClient;
 
         static McpBridge()
         {
@@ -63,20 +80,67 @@ namespace UnityMcpBridge.Editor
         [McpTool("ping", "Health check; returns the Unity version.")]
         public static object Ping() => new { pong = true, unityVersion = Application.unityVersion };
 
-        private static void StartServer()
+        // --- server lifecycle (also driven by the Editor window) ----------------
+
+        public static void StartServer()
         {
             try
             {
                 _server = new WebSocketServer(Host, Port);
                 _server.OnMessage += HandleMessage;
                 _server.Start();
+                IsListening = true;
                 Debug.Log($"[McpBridge] listening on ws://{Host}:{Port}");
             }
             catch (Exception e)
             {
+                IsListening = false;
                 Debug.LogError($"[McpBridge] failed to start server on ws://{Host}:{Port}: {e.Message}");
             }
         }
+
+        public static void Stop()
+        {
+            _server?.Stop();
+            _server = null;
+            IsListening = false;
+        }
+
+        public static void Restart()
+        {
+            Stop();
+            StartServer();
+        }
+
+        /// <summary>Change the listen port (persisted) and restart the server.</summary>
+        public static void SetPort(int port)
+        {
+            if (port < 1024 || port > 65535)
+            {
+                Debug.LogWarning($"[McpBridge] port {port} out of range (1024-65535).");
+                return;
+            }
+            Port = port;
+            Restart();
+        }
+
+        // --- activity log (for the Editor window) -------------------------------
+
+        public static string[] RecentActivity
+        {
+            get { lock (_logLock) return _recent.ToArray(); }
+        }
+
+        private static void LogActivity(string tool)
+        {
+            lock (_logLock)
+            {
+                _recent.Add($"{DateTime.Now:HH:mm:ss}  {tool}");
+                if (_recent.Count > 50) _recent.RemoveAt(0);
+            }
+        }
+
+        // --- request handling ---------------------------------------------------
 
         // Runs on the MAIN THREAD every Editor tick.
         private static void Pump()
@@ -93,6 +157,7 @@ namespace UnityMcpBridge.Editor
         // arg binding and dispatch all live in ToolRegistry (one code path).
         private static void HandleMessage(string json, Action<string> reply)
         {
+            LogActivity(TryGetTool(json));
             _mainThreadJobs.Enqueue(() =>
             {
                 // ToolRegistry replies via `reply` — immediately for sync tools, or later
@@ -102,10 +167,15 @@ namespace UnityMcpBridge.Editor
             });
         }
 
+        private static string TryGetTool(string json)
+        {
+            try { return (string)JObject.Parse(json)["tool"] ?? "?"; }
+            catch { return "?"; }
+        }
+
         private static void OnBeforeReload()
         {
-            _server?.Stop();
-            _server = null;
+            Stop();
         }
     }
 

@@ -18,7 +18,10 @@ public enum ConnectionState { Connected, Reconnecting, Down }
 
 public sealed class UnityClient : IAsyncDisposable
 {
-    private const string Url = "ws://127.0.0.1:17890";
+    public const int DefaultPort = 17890;
+    private readonly string _url;
+
+    public UnityClient(int port = DefaultPort) => _url = $"ws://127.0.0.1:{port}";
 
     // How long a call will PARK while (re)connecting before giving up — covers a
     // domain reload (script recompile) where Unity briefly tears the socket down.
@@ -97,13 +100,13 @@ public sealed class UnityClient : IAsyncDisposable
                 {
                     using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                     connectCts.CancelAfter(TimeSpan.FromSeconds(5));
-                    await ws.ConnectAsync(new Uri(Url), connectCts.Token);
+                    await ws.ConnectAsync(new Uri(_url), connectCts.Token);
 
                     _ws = ws;
                     State = ConnectionState.Connected;
                     _receiveCts = new CancellationTokenSource();
                     _ = Task.Run(() => ReceiveLoopAsync(ws, _receiveCts.Token));
-                    Log($"connected to Unity bridge at {Url}");
+                    Log($"connected to Unity bridge at {_url}");
                     return;
                 }
                 catch (Exception e)
@@ -116,7 +119,7 @@ public sealed class UnityClient : IAsyncDisposable
                     {
                         State = ConnectionState.Down;
                         throw new InvalidOperationException(
-                            $"Could not connect to the Unity bridge at {Url} within {ConnectParkTimeout.TotalSeconds:0}s. " +
+                            $"Could not connect to the Unity bridge at {_url} within {ConnectParkTimeout.TotalSeconds:0}s. " +
                             "Is the Unity 6 Editor open with the unity-mcp-bridge package loaded? " +
                             $"({last.Message})");
                     }

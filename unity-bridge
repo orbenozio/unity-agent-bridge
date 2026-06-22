@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# unity-bridge - CLI launcher for the Unity MCP bridge (git-bash / WSL).
+# Runs the already-built server dll directly (fast; no rebuild).
+set -euo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTNET="$(command -v dotnet || echo '/c/Program Files/dotnet/dotnet.exe')"
+exec "$DOTNET" "$DIR/server/bin/Debug/net8.0/unity-mcp-bridge-server.dll" "$@"

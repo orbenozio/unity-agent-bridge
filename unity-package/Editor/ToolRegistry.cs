@@ -9,6 +9,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -21,6 +22,23 @@ namespace UnityMcpBridge.Editor
         {
             public MethodInfo Method;
             public ParameterInfo[] Params;
+            public string Description;
+        }
+
+        // Public metadata shapes (used by list_tools and the Editor window).
+        public sealed class ToolInfo
+        {
+            public string name;
+            public string description;
+            public List<ParamInfo> parameters;
+        }
+
+        public sealed class ParamInfo
+        {
+            public string name;
+            public string type;
+            public bool optional;
+            public string description;
         }
 
         private static Dictionary<string, Tool> _tools;
@@ -41,11 +59,48 @@ namespace UnityMcpBridge.Editor
                     {
                         var attr = m.GetCustomAttribute<McpToolAttribute>();
                         if (attr == null) continue;
-                        map[attr.Name] = new Tool { Method = m, Params = m.GetParameters() };
+                        map[attr.Name] = new Tool { Method = m, Params = m.GetParameters(), Description = attr.Description };
                     }
                 }
             }
             _tools = map;
+        }
+
+        /// <summary>All discovered tools with their parameters (sorted by name).</summary>
+        public static List<ToolInfo> GetToolInfos()
+        {
+            EnsureScanned();
+            var list = new List<ToolInfo>();
+            foreach (var kv in _tools)
+            {
+                var ps = new List<ParamInfo>();
+                foreach (var p in kv.Value.Params)
+                {
+                    if (p.ParameterType == typeof(McpToolContext)) continue; // injected, not an arg
+                    var pa = p.GetCustomAttribute<ParamAttribute>();
+                    ps.Add(new ParamInfo
+                    {
+                        name = p.Name,
+                        type = SimpleType(p.ParameterType),
+                        optional = p.HasDefaultValue,
+                        description = pa != null ? pa.Description : "",
+                    });
+                }
+                list.Add(new ToolInfo { name = kv.Key, description = kv.Value.Description, parameters = ps });
+            }
+            return list.OrderBy(t => t.name).ToList();
+        }
+
+        private static string SimpleType(Type t)
+        {
+            if (t == typeof(string)) return "string";
+            if (t == typeof(int)) return "int";
+            if (t == typeof(long)) return "int";
+            if (t == typeof(float) || t == typeof(double)) return "number";
+            if (t == typeof(bool)) return "bool";
+            if (t == typeof(string[])) return "string[]";
+            if (typeof(JToken).IsAssignableFrom(t)) return "json";
+            return t.Name;
         }
 
         /// <summary>
@@ -69,6 +124,7 @@ namespace UnityMcpBridge.Editor
 
                 EnsureScanned();
                 if (!_tools.TryGetValue(toolName, out var tool)) { ctx.Fail($"unknown tool: {toolName}"); return; }
+                if (!ToolGate.IsEnabled(toolName)) { ctx.Fail($"tool '{toolName}' is disabled in the Unity MCP Bridge window"); return; }
 
                 var args = root["args"] as JObject ?? new JObject();
                 var values = new object[tool.Params.Length];

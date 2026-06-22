@@ -74,4 +74,12 @@ public class UnityMcpTools(UnityClient unity)
     [McpServerTool, Description("Inspect a GameObject by name or instanceId: transform + each component's serialized properties (capped).")]
     public Task<string> get_object(string target)
         => unity.CallAsync("get_object", new { target });
+
+    [McpServerTool, Description("List every available bridge tool with its parameters (discovery).")]
+    public Task<string> list_tools()
+        => unity.CallAsync("list_tools", new { });
+
+    [McpServerTool, Description("Bridge status: Unity version, listen host/port, and connection state.")]
+    public Task<string> bridge_info()
+        => unity.CallAsync("bridge_info", new { });
 }

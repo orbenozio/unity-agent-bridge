@@ -39,6 +39,9 @@ namespace UnityMcpBridge.Editor
         /// <summary>Raised on a background thread: (textPayload, replyCallback).</summary>
         public event Action<string, Action<string>> OnMessage;
 
+        /// <summary>True while a client is connected (for status display).</summary>
+        public bool HasClient => _client != null && _client.Connected;
+
         public WebSocketServer(string host, int port)
         {
             _host = host;
