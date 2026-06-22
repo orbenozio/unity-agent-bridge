@@ -10,12 +10,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Official C# MCP SDK. Floating to the latest (incl. prerelease) so `dotnet
-         restore` resolves on any machine; PIN this to an exact version once you have
-         run `dotnet restore` and seen what resolved (e.g. dotnet list package). -->
-    <PackageReference Include="ModelContextProtocol" Version="*-*" />
+    <!-- Official C# MCP SDK (stdio server transport + [McpServerTool] discovery). -->
+    <PackageReference Include="ModelContextProtocol" Version="1.4.0" />
     <!-- Brings in the generic host + the console logger used in Program.cs. -->
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.*" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
   </ItemGroup>
 
 </Project>
