@@ -5,10 +5,12 @@
 //   - Receives requests on a background thread and ENQUEUES them.
 //   - Drains the queue on EditorApplication.update — i.e. the MAIN THREAD —
 //     because nearly all Unity APIs require it.
-//   - Tears down / restarts cleanly across domain reloads so the socket survives.
+//   - Tears down cleanly before a domain reload so the socket/port is released;
+//     [InitializeOnLoad] re-runs this ctor on the new domain and restarts it.
 
 using System;
 using System.Collections.Concurrent;
+using System.Text;
 using UnityEditor;
 using UnityEngine;
 
@@ -21,17 +23,30 @@ namespace UnityMcpBridge.Editor
         private const int Port = 17890;
 
         private static readonly ConcurrentQueue<Action> _mainThreadJobs = new();
-        // private static WebSocketServer _server;   // TODO(M1)
+        private static WebSocketServer _server;
 
         static McpBridge()
         {
-            // TODO(M1): create & start the WebSocket server; wire OnMessage -> HandleMessage.
-            // TODO(M2): install the Console ring buffer (Application.logMessageReceivedThreaded).
             EditorApplication.update += Pump;
-            AssemblyReloadEvents.beforeAssemblyReload += OnBeforeReload; // TODO(M4): _server?.Stop();
-            AssemblyReloadEvents.afterAssemblyReload  += OnAfterReload;  // TODO(M4): _server?.Start();
+            AssemblyReloadEvents.beforeAssemblyReload += OnBeforeReload;
 
-            Debug.Log($"[McpBridge] scaffold loaded — will listen on ws://{Host}:{Port} once M1 is implemented.");
+            StartServer();
+            // TODO(M2): install the Console ring buffer (Application.logMessageReceivedThreaded).
+        }
+
+        private static void StartServer()
+        {
+            try
+            {
+                _server = new WebSocketServer(Host, Port);
+                _server.OnMessage += HandleMessage;
+                _server.Start();
+                Debug.Log($"[McpBridge] listening on ws://{Host}:{Port}");
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[McpBridge] failed to start server on ws://{Host}:{Port}: {e.Message}");
+            }
         }
 
         // Runs on the MAIN THREAD every Editor tick.
@@ -44,11 +59,93 @@ namespace UnityMcpBridge.Editor
             }
         }
 
-        // Called on a BACKGROUND thread by the WebSocket server. Only enqueues.
-        // TODO(M1): parse { id, tool, args }, enqueue ToolRegistry.Invoke, reply with JSON.
-        // private static void HandleMessage(string json, Action<string> reply) { ... }
+        // Called on a BACKGROUND thread by the WebSocket server. Parse, marshal the
+        // actual work onto the main thread, then reply with the JSON envelope.
+        private static void HandleMessage(string json, Action<string> reply)
+        {
+            Request req;
+            try { req = JsonUtility.FromJson<Request>(json); }
+            catch (Exception e) { reply(Protocol.Error("", "bad request json: " + e.Message)); return; }
 
-        private static void OnBeforeReload() { /* TODO(M4): stop server cleanly */ }
-        private static void OnAfterReload()  { /* TODO(M4): restart server */ }
+            if (req == null || string.IsNullOrEmpty(req.tool))
+            {
+                reply(Protocol.Error(req?.id ?? "", "missing tool"));
+                return;
+            }
+
+            _mainThreadJobs.Enqueue(() =>
+            {
+                string response;
+                try { response = Dispatch(req); }
+                catch (Exception e) { response = Protocol.Error(req.id, e.ToString()); }
+                reply(response);
+            });
+        }
+
+        // MAIN THREAD. M1 ships a single built-in tool: ping.
+        // TODO(M2): route unknown tools through ToolRegistry.Invoke(json).
+        private static string Dispatch(Request req)
+        {
+            switch (req.tool)
+            {
+                case "ping":
+                    var result = $"{{\"pong\":true,\"unityVersion\":{Protocol.JsonString(Application.unityVersion)}}}";
+                    return Protocol.Ok(req.id, result);
+                default:
+                    return Protocol.Error(req.id, $"unknown tool: {req.tool}");
+            }
+        }
+
+        private static void OnBeforeReload()
+        {
+            _server?.Stop();
+            _server = null;
+        }
+
+        [Serializable]
+        private class Request
+        {
+            public string id;
+            public string tool;
+            // `args` is intentionally not parsed here in M1; ToolRegistry binds it in M2.
+        }
+    }
+
+    // Tiny response-envelope helpers shared by the bridge and (from M2) ToolRegistry.
+    // Wire format (SPEC §5): { id, ok, result | error }.
+    internal static class Protocol
+    {
+        public static string Ok(string id, string resultJson)
+            => $"{{\"id\":{JsonString(id)},\"ok\":true,\"result\":{resultJson}}}";
+
+        public static string Error(string id, string message)
+            => $"{{\"id\":{JsonString(id)},\"ok\":false,\"error\":{JsonString(message)}}}";
+
+        /// <summary>Escape a string into a quoted JSON string literal.</summary>
+        public static string JsonString(string s)
+        {
+            if (s == null) return "null";
+            var sb = new StringBuilder(s.Length + 2);
+            sb.Append('"');
+            foreach (var c in s)
+            {
+                switch (c)
+                {
+                    case '"': sb.Append("\\\""); break;
+                    case '\\': sb.Append("\\\\"); break;
+                    case '\b': sb.Append("\\b"); break;
+                    case '\f': sb.Append("\\f"); break;
+                    case '\n': sb.Append("\\n"); break;
+                    case '\r': sb.Append("\\r"); break;
+                    case '\t': sb.Append("\\t"); break;
+                    default:
+                        if (c < 0x20) sb.Append("\\u").Append(((int)c).ToString("x4"));
+                        else sb.Append(c);
+                        break;
+                }
+            }
+            sb.Append('"');
+            return sb.ToString();
+        }
     }
 }

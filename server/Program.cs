@@ -6,27 +6,23 @@
 //   - Register UnityClient as a singleton (the WebSocket pipe to the Unity bridge).
 //
 // IMPORTANT: this process is a DUMB, FAST PIPE. No Unity logic here.
-//
-// TODO(M1): wire up the host below. Pseudocode shape:
-//
-//   var builder = Host.CreateApplicationBuilder(args);
-//   builder.Services.AddSingleton<UnityClient>();        // ws://127.0.0.1:17890
-//   builder.Services
-//          .AddMcpServer()
-//          .WithStdioServerTransport()
-//          .WithToolsFromAssembly();                      // picks up UnityMcpTools
-//   await builder.Build().RunAsync();
-//
 // NOTE: stdout is reserved for the MCP stdio transport. Log to STDERR only.
 
-namespace UnityMcpBridge;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using UnityMcpBridge;
 
-internal static class Program
-{
-    private static async Task Main(string[] args)
-    {
-        // TODO(M1): replace with the host setup described above.
-        await Console.Error.WriteLineAsync(
-            "[unity-mcp-bridge] server scaffold — implement Program.cs per SPEC.md §7 (M1).");
-    }
-}
+var builder = Host.CreateApplicationBuilder(args);
+
+// stdout belongs to the MCP transport — route all logging to stderr.
+builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+
+builder.Services.AddSingleton<UnityClient>();
+
+builder.Services
+    .AddMcpServer()
+    .WithStdioServerTransport()
+    .WithToolsFromAssembly(); // discovers UnityMcpTools ([McpServerToolType])
+
+await builder.Build().RunAsync();
