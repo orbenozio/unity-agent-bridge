@@ -1,5 +1,12 @@
 {
   "dependencies": {
+    "com.unity.nuget.newtonsoft-json": {
+      "version": "3.2.1",
+      "depth": 0,
+      "source": "registry",
+      "dependencies": {},
+      "url": "https://packages.unity.com"
+    },
     "com.webinar.unity-mcp-bridge": {
       "version": "file:../../unity-package",
       "depth": 0,

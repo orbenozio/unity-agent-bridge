@@ -13,6 +13,7 @@ using System.Collections.Concurrent;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
+using UnityMcpBridge.Editor.Tools;
 
 namespace UnityMcpBridge.Editor
 {
@@ -30,9 +31,14 @@ namespace UnityMcpBridge.Editor
             EditorApplication.update += Pump;
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeReload;
 
+            ConsoleTools.Install();   // ring buffer must capture logs from load onward
             StartServer();
-            // TODO(M2): install the Console ring buffer (Application.logMessageReceivedThreaded).
         }
+
+        // The bootstrap tool. Every other capability is just another [McpTool]
+        // discovered by ToolRegistry — this one proves the pipe is alive.
+        [McpTool("ping", "Health check; returns the Unity version.")]
+        public static object Ping() => new { pong = true, unityVersion = Application.unityVersion };
 
         private static void StartServer()
         {
@@ -59,55 +65,24 @@ namespace UnityMcpBridge.Editor
             }
         }
 
-        // Called on a BACKGROUND thread by the WebSocket server. Parse, marshal the
-        // actual work onto the main thread, then reply with the JSON envelope.
+        // Called on a BACKGROUND thread by the WebSocket server. Marshal ALL tool
+        // work onto the main thread, then reply with the JSON envelope. Parsing,
+        // arg binding and dispatch all live in ToolRegistry (one code path).
         private static void HandleMessage(string json, Action<string> reply)
         {
-            Request req;
-            try { req = JsonUtility.FromJson<Request>(json); }
-            catch (Exception e) { reply(Protocol.Error("", "bad request json: " + e.Message)); return; }
-
-            if (req == null || string.IsNullOrEmpty(req.tool))
-            {
-                reply(Protocol.Error(req?.id ?? "", "missing tool"));
-                return;
-            }
-
             _mainThreadJobs.Enqueue(() =>
             {
                 string response;
-                try { response = Dispatch(req); }
-                catch (Exception e) { response = Protocol.Error(req.id, e.ToString()); }
+                try { response = ToolRegistry.Invoke(json); }
+                catch (Exception e) { response = Protocol.Error("", e.ToString()); }
                 reply(response);
             });
-        }
-
-        // MAIN THREAD. M1 ships a single built-in tool: ping.
-        // TODO(M2): route unknown tools through ToolRegistry.Invoke(json).
-        private static string Dispatch(Request req)
-        {
-            switch (req.tool)
-            {
-                case "ping":
-                    var result = $"{{\"pong\":true,\"unityVersion\":{Protocol.JsonString(Application.unityVersion)}}}";
-                    return Protocol.Ok(req.id, result);
-                default:
-                    return Protocol.Error(req.id, $"unknown tool: {req.tool}");
-            }
         }
 
         private static void OnBeforeReload()
         {
             _server?.Stop();
             _server = null;
-        }
-
-        [Serializable]
-        private class Request
-        {
-            public string id;
-            public string tool;
-            // `args` is intentionally not parsed here in M1; ToolRegistry binds it in M2.
         }
     }
 
