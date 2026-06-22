@@ -4,12 +4,17 @@
 תוכנית הבנייה המלאה ב-[MILESTONES.md](./MILESTONES.md).
 
 ## Todo
-- [ ] M4 - `run_playmode` + `run_tests` + עמידות reload/reconnect
-- [ ] M5 - ליטוש לוובינר (באג מכוון, טסטים, תסריט)
+(הכל הושלם - כל ה-milestones M0-M5)
 
 ## In progress
 
 ## Done
+- [x] M5 - ליטוש לוובינר: באג מכוון `Assets/Scripts/GameBoot.cs` (NRE ב-Play),
+      טסטי EditMode, ו-`demo-unity-project/CLAUDE.md`. מאומת חי: run_playmode תפס את
+      ה-NRE, ו-read_console הצביע על GameBoot.cs:17. (תסריט הוובינר כבר היה מלא בשלד.)
+- [x] M4 - `run_playmode` + `run_tests` (אסינכרוניים דרך McpToolContext) + עמידות:
+      DisableDomainReload בצד Unity, reconnect עם backoff/parking בצד השרת. מאומת חי:
+      run_tests passed:2, run_playmode entered/exited, והשרת האמיתי התחבר ל-Unity (ping).
 - [x] M3 - `create_gameobject` (primitive/ריק) + `add_component`. פתרון יעד לפי
       שם או instanceId, פתרון טיפוס רכיב על פני האסמבליות, Undo. מאומת חי: cube
       "Player" + Rigidbody (לפי שם) + BoxCollider (לפי instanceId), ו-Light ל-GO ריק.
