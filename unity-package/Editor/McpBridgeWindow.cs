@@ -102,10 +102,10 @@ namespace UnityMcpBridge.Editor
 
         private void DrawCliHints()
         {
-            EditorGUILayout.LabelField("CLI", EditorStyles.boldLabel);
-            var port = McpBridge.Port;
-            CopyableRow($"dotnet run --project server -- --port {port} ping");
-            CopyableRow($"dotnet run --project server -- --port {port} list");
+            EditorGUILayout.LabelField("CLI  (run unity-bridge.cmd from the repo root)", EditorStyles.boldLabel);
+            var portArg = McpBridge.Port == McpBridge.DefaultPort ? "" : $"--port {McpBridge.Port} ";
+            CopyableRow($"unity-bridge {portArg}ping");
+            CopyableRow($"unity-bridge {portArg}list");
         }
 
         private void DrawToolsHeader()
