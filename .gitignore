@@ -29,5 +29,8 @@ Thumbs.db
 # Claude / Agents hub - machine-specific junctions, not part of the project
 .claude/
 
+# Local MCP registration (machine-specific absolute paths to dotnet + the built dll)
+.mcp.json
+
 # Net working-time log (auto-measured via global hooks; also self-ignores)
 .timelog/
