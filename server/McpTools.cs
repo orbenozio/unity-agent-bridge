@@ -1,4 +1,4 @@
-// McpTools.cs — thin MCP -> Unity forwarders. NO Unity logic here (SPEC §7).
+// McpTools.cs - thin MCP -> Unity forwarders. NO Unity logic here (SPEC §7).
 //
 // Each method is exposed to Claude as an MCP tool and simply forwards to the
 // Unity bridge via UnityClient.CallAsync. Keep arg names identical to the wire
@@ -41,6 +41,14 @@ public class UnityMcpTools(UnityClient unity)
     [McpServerTool, Description("Report the live connection state between this server and the Unity Editor.")]
     public string unity_status() => unity.State.ToString();
 
+    [McpServerTool, Description("Import changed assets and recompile scripts (AssetDatabase.Refresh). May trigger a domain reload; follow with compile_errors.")]
+    public Task<string> refresh_assets()
+        => unity.CallAsync("refresh_assets", new { });
+
+    [McpServerTool, Description("C# compile errors from the last compilation (empty = clean). Pair with refresh_assets for an edit-compile-fix loop.")]
+    public Task<string> compile_errors(bool includeWarnings = false)
+        => unity.CallAsync("compile_errors", new { includeWarnings });
+
     // --- scene/UI editing (extension tools) ---------------------------------
 
     [McpServerTool, Description("Reparent a GameObject under another (empty/null parent = scene root).")]
@@ -75,11 +83,63 @@ public class UnityMcpTools(UnityClient unity)
     public Task<string> get_object(string target)
         => unity.CallAsync("get_object", new { target });
 
-    [McpServerTool, Description("List every available bridge tool with its parameters (discovery).")]
+    [McpServerTool, Description("List every available bridge tool with its parameters (discovery) - includes project-defined custom tools.")]
     public Task<string> list_tools()
         => unity.CallAsync("list_tools", new { });
+
+    [McpServerTool, Description("Invoke ANY bridge tool by name with a JSON args object. This is how you call project-defined custom [McpTool] methods that have no dedicated forwarder. Discover names+params with list_tools.")]
+    public Task<string> call_tool(string tool, JsonElement? args = null)
+        => unity.CallAsync(tool, args.HasValue ? (object)args.Value : new { });
 
     [McpServerTool, Description("Bridge status: Unity version, listen host/port, and connection state.")]
     public Task<string> bridge_info()
         => unity.CallAsync("bridge_info", new { });
+
+    // --- custom commands (no-code, shareable macros of tool calls) -----------
+
+    [McpServerTool, Description("List project-defined custom commands (named macros of tool calls) with their params.")]
+    public Task<string> list_commands()
+        => unity.CallAsync("list_commands", new { });
+
+    [McpServerTool, Description("Run a project-defined custom command by name; args is a JSON object of its params.")]
+    public Task<string> run_command(string name, JsonElement? args = null)
+        => unity.CallAsync("run_command", new { name, args = args.HasValue ? (object)args.Value : new { } });
+
+    [McpServerTool, Description("Create or update a custom command (a named macro). steps = JSON array of {tool,args} using ${param} placeholders; parameters = optional JSON array of {name,default}.")]
+    public Task<string> save_command(string name, JsonElement steps, string? description = null, JsonElement? parameters = null)
+        => unity.CallAsync("save_command", new { name, steps, description, parameters });
+
+    [McpServerTool, Description("Delete a project-defined custom command by name.")]
+    public Task<string> delete_command(string name)
+        => unity.CallAsync("delete_command", new { name });
+
+    [McpServerTool, Description("Bundle custom commands into a shareable .json pack (drop it into another project to import). names empty = all. Returns the pack path.")]
+    public Task<string> export_commands(string? path = null, string[]? names = null)
+        => unity.CallAsync("export_commands", new { path, names });
+
+    [McpServerTool, Description("Import custom commands from a .json pack (a file path OR inline pack JSON). overwrite replaces existing names.")]
+    public Task<string> import_commands(string pack, bool overwrite = false)
+        => unity.CallAsync("import_commands", new { pack, overwrite });
+
+    // --- custom C# tools (real [McpTool] methods, managed like commands) ------
+
+    [McpServerTool, Description("List project-defined custom C# tools (the .cs files in the project's CustomTools folder).")]
+    public Task<string> list_custom_tools()
+        => unity.CallAsync("list_custom_tools", new { });
+
+    [McpServerTool, Description("Scaffold a new custom C# [McpTool] from a template (writes <name>.cs). Then edit the file and call refresh_assets to compile it.")]
+    public Task<string> new_custom_tool(string name, string? description = null, bool overwrite = false)
+        => unity.CallAsync("new_custom_tool", new { name, description, overwrite });
+
+    [McpServerTool, Description("Delete a custom tool .cs file by name. Changes code; call refresh_assets after.")]
+    public Task<string> delete_custom_tool(string name)
+        => unity.CallAsync("delete_custom_tool", new { name });
+
+    [McpServerTool, Description("Bundle custom tool .cs files into a shareable .json pack (source embedded). names empty = all.")]
+    public Task<string> export_tools(string? path = null, string[]? names = null)
+        => unity.CallAsync("export_tools", new { path, names });
+
+    [McpServerTool, Description("Import custom tools from a .json pack (a file path OR inline pack JSON). overwrite replaces existing. Changes code; call refresh_assets after.")]
+    public Task<string> import_tools(string pack, bool overwrite = false)
+        => unity.CallAsync("import_tools", new { pack, overwrite });
 }

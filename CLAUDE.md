@@ -1,15 +1,15 @@
-# CLAUDE.md — unity-agent-bridge
+# CLAUDE.md - unity-agent-bridge
 
 A teaching MCP server connecting **Claude Code** to the **Unity 6 Editor**. Read
 [`SPEC.md`](./SPEC.md) before changing architecture; it is the source of truth.
 
 ## What this is
-- `server/` — **.NET 8** MCP server. Speaks MCP-over-stdio to Claude, our JSON-over-
+- `server/` - **.NET 8** MCP server. Speaks MCP-over-stdio to Claude, our JSON-over-
   WebSocket to Unity. It is a **dumb, fast pipe**: NO Unity logic lives here.
-- `unity-package/` — **C# Unity Editor package** (`Editor/`). The bridge: a WebSocket
+- `unity-package/` - **C# Unity Editor package** (`Editor/`). The bridge: a WebSocket
   server + main-thread job pump + the actual tool implementations. **All behavior lives
   here.**
-- `demo-unity-project/` — a tiny Unity 6 project used for the live demo.
+- `demo-unity-project/` - a tiny Unity 6 project used for the live demo.
 
 ## Golden rules
 1. **Unity main thread.** Any Unity API (`GameObject`, `EditorApplication`,
@@ -24,14 +24,16 @@ A teaching MCP server connecting **Claude Code** to the **Unity 6 Editor**. Read
 4. **Add a tool in one place.** A new capability = one static method with
    `[McpTool("name","desc")]` in `unity-package/Editor/Tools/` + a matching thin
    forwarder in `server/McpTools.cs`. Keep arg names identical on both sides.
-5. **Keep the server dumb.** If you're tempted to put Unity logic in `server/`, stop —
+5. **Keep the server dumb.** If you're tempted to put Unity logic in `server/`, stop -
    it belongs in the bridge.
 6. **Survive reload.** Don't break the `AssemblyReloadEvents` teardown/restart or the
    server-side reconnect/backoff. They are what make this feel solid.
 
 ## Conventions
 - Wire protocol: `{ id, tool, args }` → `{ id, ok, result | error }`. See SPEC §5.
-- Port: `127.0.0.1:17890` (localhost only, no auth — by design for v1).
+- Port: `127.0.0.1:17890` (localhost only). The handshake is gated by `BridgeAuth`
+  (shared-secret token + Host pinning + Origin rejection); the token auto-provisions
+  to `~/.unity-agent-bridge/bridge-<port>.token`. See SPEC §5.1.
 - Tool results are **terse and structured**. Never dump whole scene trees.
 - C#: nullable enabled in server; the Unity side targets the project's C# version.
 

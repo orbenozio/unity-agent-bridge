@@ -1,10 +1,10 @@
-// ToolRegistry.cs — reflection-based [McpTool] discovery & invocation (SPEC §6).
+// ToolRegistry.cs - reflection-based [McpTool] discovery & invocation (SPEC §6).
 //
 // On first use, scan all loaded assemblies for static methods marked [McpTool],
 // build a name -> (MethodInfo, parameters) map, then for each request:
 //   - bind `args` JSON fields to parameters by NAME (with defaults for missing),
 //   - invoke (already on the main thread, called from McpBridge.Pump),
-//   - serialize the return value into { id, ok:true, result } — or, on throw,
+//   - serialize the return value into { id, ok:true, result } - or, on throw,
 //     into { id, ok:false, error } (NEVER let the exception escape).
 
 using System;
@@ -101,6 +101,41 @@ namespace UnityAgentBridge.Editor
             if (t == typeof(string[])) return "string[]";
             if (typeof(JToken).IsAssignableFrom(t)) return "json";
             return t.Name;
+        }
+
+        /// <summary>
+        /// Invoke a tool synchronously by name with a pre-parsed args object and RETURN
+        /// its result (instead of replying over the wire). Used by custom commands to
+        /// chain built-in tools. Async tools (those taking an McpToolContext) are not
+        /// allowed here - a command step must complete inline. Throws on any failure.
+        /// </summary>
+        public static object InvokeDirect(string tool, JObject args)
+        {
+            EnsureScanned();
+            if (string.IsNullOrEmpty(tool)) throw new Exception("step is missing 'tool'");
+            if (!_tools.TryGetValue(tool, out var t)) throw new Exception($"unknown tool: {tool}");
+            if (!ToolGate.IsEnabled(tool)) throw new Exception($"tool '{tool}' is disabled in the Unity Agent Bridge window");
+
+            var values = new object[t.Params.Length];
+            for (int i = 0; i < t.Params.Length; i++)
+            {
+                var p = t.Params[i];
+                if (p.ParameterType == typeof(McpToolContext))
+                    throw new Exception($"tool '{tool}' is async and cannot be used inside a command");
+
+                var token = args?[p.Name];
+                if (token == null || token.Type == JTokenType.Null)
+                    values[i] = p.HasDefaultValue
+                        ? p.DefaultValue
+                        : (p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null);
+                else if (typeof(JToken).IsAssignableFrom(p.ParameterType))
+                    values[i] = token;
+                else
+                    values[i] = token.ToObject(p.ParameterType);
+            }
+
+            try { return t.Method.Invoke(null, values); }
+            catch (TargetInvocationException tie) { throw tie.InnerException ?? tie; }
         }
 
         /// <summary>

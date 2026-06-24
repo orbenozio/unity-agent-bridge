@@ -1,4 +1,4 @@
-# SPEC — `unity-agent-bridge`
+# SPEC - `unity-agent-bridge`
 
 A **minimal-yet-real** MCP server that connects **Claude Code** to the **Unity 6
 Editor**, built for a live webinar and extensible into a genuine tool.
@@ -14,17 +14,19 @@ Editor**, built for a live webinar and extensible into a genuine tool.
 ### Goals
 - **Teach the architecture.** Every layer is small enough to read on a slide.
 - **Be real.** It actually creates GameObjects, reads the Console, runs Play Mode
-  and tests against a live Unity 6 Editor — no mocks.
+  and tests against a live Unity 6 Editor - no mocks.
 - **One language end-to-end.** C#/.NET on both sides (server + bridge) so there is
   one stack to learn and debug. Same language as Unity itself.
-- **Survive the Unity pain points** that every existing server hits — domain reload
-  and Play Mode disconnects — gracefully from day one.
+- **Survive the Unity pain points** that every existing server hits - domain reload
+  and Play Mode disconnects - gracefully from day one.
 - **Extensible in one line.** Adding a new capability = one C# method + one
   `[McpTool]` attribute.
 
 ### Non-goals (v1)
 - Not 268 tools. Four, done well.
-- No remote/cloud transport, no auth, no Docker. Localhost only.
+- No remote/cloud transport, no Docker. Localhost only.
+- Auth is **on** but minimal: a localhost handshake gate (token + Host pinning +
+  Origin rejection), not accounts/TLS/remote identity. See §5.1.
 - No runtime-in-game support (Editor only).
 - No multi-instance routing (single Editor).
 
@@ -54,7 +56,7 @@ Editor**, built for a live webinar and extensible into a genuine tool.
                                              └──────────────────┘
 ```
 
-**Why two processes and two transports — on purpose:**
+**Why two processes and two transports - on purpose:**
 
 1. **Claude ↔ Server = stdio.** This is how Claude Code launches and speaks to MCP
    servers (`claude mcp add`). The server is a child process of Claude.
@@ -93,7 +95,7 @@ EditorApplication.update += () => {
 };
 ```
 
-This marshalling is **the heart of the demo** — it is what makes "an external AI
+This marshalling is **the heart of the demo** - it is what makes "an external AI
 touch the Editor" possible, and it is ~6 lines. Show it on a slide.
 
 ---
@@ -127,7 +129,7 @@ This single feature is what makes the server feel solid instead of a toy.
 ## 5. Wire protocol (Server ↔ Unity)
 
 A deliberately tiny JSON envelope over WebSocket text frames. **This is our own
-protocol, not MCP** — the server translates between this and MCP.
+protocol, not MCP** - the server translates between this and MCP.
 
 ### Request (Server → Unity)
 ```jsonc
@@ -154,7 +156,32 @@ protocol, not MCP** — the server translates between this and MCP.
 
 ---
 
-## 6. Unity side — the Bridge (C# package)
+## 5.1 Security - the handshake gate
+
+`127.0.0.1` is not a trust boundary. Any process running as the same user, and any
+web page in a browser (`new WebSocket("ws://127.0.0.1:17890")` is not blocked by
+CORS), can reach the port. We close that at the WebSocket handshake with three
+cheap, **fail-closed** checks, before switching protocols:
+
+1. **Shared-secret token.** On load, Unity generates a random token into a per-user,
+   per-port file: `~/.unity-agent-bridge/bridge-<port>.token`. The MCP server
+   computes the same path (from the user profile, so nothing is passed between
+   processes), reads the token, and presents it as the `X-Unity-Bridge-Token`
+   header. Missing/wrong token → `401`. Auto-provisioned, so setup is zero.
+2. **Host pinning (anti DNS-rebinding).** A malicious site can resolve its domain to
+   `127.0.0.1`, but the browser still sends `Host: attacker.com`. We accept only
+   `127.0.0.1` / `localhost:<port>` → otherwise `403`.
+3. **Origin rejection.** Native clients (our .NET `ClientWebSocket`) send no
+   `Origin`; browsers always do. Presence of `Origin` → `403`, killing the browser
+   vector outright.
+
+Implemented once in `BridgeAuth` on each side. The token file is the trust root; it
+lives under the user profile (same OS trust boundary as the user). Not in scope for
+v1: TLS, file ACL hardening, multi-user identity, remote auth.
+
+---
+
+## 6. Unity side - the Bridge (C# package)
 
 Lives in `unity-package/` and is installed into the demo project's `Packages/`.
 
@@ -226,7 +253,68 @@ serializes the return value into `result`.
 
 ---
 
-## 7. Server side — the MCP server (.NET 8)
+## 6.1 Extending the bridge - custom tools & commands
+
+The bridge ships with built-in tools; a real product also lets each user add their
+own, and share them between projects. Two layers, low → high power:
+
+### A. C# custom tools (full power, managed like commands)
+`ToolRegistry` scans **all loaded assemblies** for `[McpTool]` static methods, so any
+`[McpTool]` a user adds auto-registers on compile. Claude invokes any discovered tool
+- built-in or user-defined - through the generic `call_tool(tool, args)` forwarder
+(discover names+params via `list_tools`). No per-tool server forwarder is needed.
+
+Custom tools get the **same lifecycle as commands** (create / list / delete / export /
+import), but they are real C# (full logic) at the cost of a recompile:
+
+- **Storage:** `<project>/Assets/UnityAgentBridge/CustomTools/Editor/<name>.cs`. The
+  `Editor` folder makes Unity compile them into the predefined `Assembly-CSharp-Editor`,
+  which auto-references this package (so `[McpTool]` is visible) and `UnityEngine.UI` -
+  **no asmdef needed**.
+- **Tools:** `list_custom_tools`, `new_custom_tool(name, description)` (scaffolds a
+  template .cs), `delete_custom_tool(name)`, `export_tools(path?, names?)`,
+  `import_tools(pack, overwrite?)`. A tool pack is `{ version, tools:[{ name, source }] }`
+  - the .cs source embedded, so one .json file is fully shareable.
+- **From the Editor window:** a Custom tools section with a New field (scaffold + open),
+  Export / Import / Open-folder buttons.
+- **Compile boundary:** the mutating tools write files but do **not** compile for you
+  (a recompile would drop the socket mid-reply). They return a hint to call
+  `refresh_assets` then `compile_errors` - the same fix-loop as any code edit.
+
+Example shipped in the demo: `create_button` (a real custom tool that ensures a
+Canvas/EventSystem and builds a uGUI Button - logic a flat command can't express),
+composed by the `main_menu` command into Play / Settings / Quit.
+
+### B. JSON command packs (no-code, shareable - the common case)
+A **command** is a named, parameterized macro of existing tool calls, stored as data:
+
+```jsonc
+{ "name": "spawn_player",
+  "description": "Cube + Rigidbody named ${name}",
+  "params": [ { "name": "name", "default": "Player" } ],
+  "steps": [
+    { "tool": "create_gameobject", "args": { "name": "${name}", "primitive": "Cube" } },
+    { "tool": "add_component",      "args": { "target": "${name}", "componentType": "Rigidbody" } }
+  ] }
+```
+
+- **Storage:** `<project>/UnityAgentBridge/Commands/<name>.json` (one file per command,
+  hand-editable, diff-friendly).
+- **Substitution:** `"${p}"` alone is replaced by param `p` with its JSON **type
+  preserved**; `"${p}"` inside a longer string is textual.
+- **Tools:** `list_commands`, `run_command(name, args)`, `save_command(...)`,
+  `delete_command(name)`, `export_commands(path?, names?)`, `import_commands(pack, overwrite?)`.
+- **Sharing:** `export_commands` bundles selected commands into a single
+  `{ version, commands:[...] }` pack file; drop it into another project and
+  `import_commands` merges it. The Editor window has Export/Import/Open-folder buttons.
+- **Authoring:** by the agent (`save_command`/`delete_command`), by hand (edit the
+  JSON), or via the window - all three.
+- **Limits (v1):** steps run inline in order and stop on first failure; async tools
+  (`run_playmode`, `run_tests`) can't be used as a step; commands don't nest.
+
+---
+
+## 7. Server side - the MCP server (.NET 8)
 
 Lives in `server/`. Speaks MCP to Claude (stdio) and our JSON to Unity (WebSocket).
 
@@ -249,7 +337,7 @@ server/
 - Reconnect with exponential backoff; **park** calls made while disconnected.
 - Expose `ConnectionState { Connected, Reconnecting, Down }`.
 
-### `McpTools.cs` — thin MCP→Unity forwarders
+### `McpTools.cs` - thin MCP→Unity forwarders
 ```csharp
 [McpServerToolType]
 public class UnityMcpTools(UnityClient unity) {
@@ -282,13 +370,13 @@ public class UnityMcpTools(UnityClient unity) {
 ```
 
 The server is intentionally a **dumb, fast pipe**: zero Unity logic lives here. All
-behavior is in the bridge. This keeps the perf story honest — the server is I/O only.
+behavior is in the bridge. This keeps the perf story honest - the server is I/O only.
 
 ---
 
-## 8. The four tools (v1) — full contracts
+## 8. The four tools (v1) - full contracts
 
-### `read_console` — *the star of the debugging demo*
+### `read_console` - *the star of the debugging demo*
 - **args:** `levels?: ("Error"|"Warning"|"Log")[]` (default all), `limit?: int = 50`
 - **Unity impl:** hook `Application.logMessageReceivedThreaded` into a ring buffer on
   load (capacity ~1000); filter & return latest `limit`.
@@ -319,7 +407,7 @@ behavior is in the bridge. This keeps the perf story honest — the server is I/
 ### `run_tests`
 - **args:** `platform?: "EditMode"|"PlayMode" = "EditMode"`, `filter?: string`
 - **Unity impl:** Unity Test Framework `TestRunnerApi`; register a callback collecting
-  results; return summary. (Async — bridges the test-runner callback back to a single
+  results; return summary. (Async - bridges the test-runner callback back to a single
   response.)
 - **result:** `{ passed: int, failed: int, skipped: int, results: [{ name, status, message }] }`
 - **Why it matters:** ties the live story to the CLI/CI story (`-runTests`).
@@ -329,11 +417,11 @@ behavior is in the bridge. This keeps the perf story honest — the server is I/
 ## 9. Token-efficiency & tool-count strategy
 
 MCP clients have practical tool-count limits and every schema costs context tokens.
-v1 ships **6 tools** — fine. The growth plan (documented now, not built):
+v1 ships **6 tools** - fine. The growth plan (documented now, not built):
 - **Two-tier lazy loading** (à la AnkleBreaker): keep a small core set exposed directly;
   put advanced tools behind one `unity_advanced(category, tool, args)` proxy with a
   `unity_list_advanced()` discovery call.
-- Keep tool **results terse and structured** — no echoing whole scene trees.
+- Keep tool **results terse and structured** - no echoing whole scene trees.
 
 ---
 
@@ -378,13 +466,13 @@ claude mcp add unity-agent-bridge -- dotnet run --project /abs/path/server
 
 ---
 
-## 12. Milestones (summary — see MILESTONES.md for the checklist)
+## 12. Milestones (summary - see MILESTONES.md for the checklist)
 
-1. **Pipe** — bridge answers `ping`; server returns it to Claude. *Proves the channel.*
+1. **Pipe** - bridge answers `ping`; server returns it to Claude. *Proves the channel.*
 2. **`read_console`** + main-thread pump + ring buffer. *The core.*
 3. **`create_gameobject` + `add_component`.** *The visual demo.*
 4. **`run_playmode` + `run_tests`** + domain-reload/reconnect handling. *Closes the arc.*
-5. **Webinar polish** — CLAUDE.md tuning, intentional bug, run-of-show script.
+5. **Webinar polish** - CLAUDE.md tuning, intentional bug, run-of-show script.
 
 ---
 

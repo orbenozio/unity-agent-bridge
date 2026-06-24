@@ -1,0 +1,10 @@
+{
+  "name": "main_menu",
+  "description": "Build a simple main menu: Play / Settings / Quit buttons on a Canvas. Composes the create_button custom tool.",
+  "params": [],
+  "steps": [
+    { "tool": "create_button", "args": { "label": "Play",     "y": 50 } },
+    { "tool": "create_button", "args": { "label": "Settings", "y": 0 } },
+    { "tool": "create_button", "args": { "label": "Quit",     "y": -50 } }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "setup_player",
+  "description": "Create a primitive named ${name}, make it a physics body (Rigidbody) with mass ${mass}.",
+  "params": [
+    { "name": "name", "default": "Player" },
+    { "name": "primitive", "default": "Cube" },
+    { "name": "mass", "default": 1 }
+  ],
+  "steps": [
+    { "tool": "create_gameobject", "args": { "name": "${name}", "primitive": "${primitive}" } },
+    { "tool": "add_component", "args": { "target": "${name}", "componentType": "Rigidbody" } },
+    { "tool": "set_property", "args": { "target": "${name}", "componentType": "Rigidbody", "property": "m_Mass", "value": "${mass}" } }
+  ]
+}

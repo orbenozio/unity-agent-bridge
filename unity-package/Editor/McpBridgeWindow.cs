@@ -1,11 +1,13 @@
-// McpBridgeWindow.cs — the in-Editor control panel for the bridge.
+// McpBridgeWindow.cs - the in-Editor control panel for the bridge.
 //
 // Window > Unity Agent Bridge. Live status; set the port; start/stop/restart; an
 // allow-list of tools (checkbox = permitted, description on hover as a tooltip);
 // a draggable splitter to trade space between the tool list and recent activity.
 
+using System.IO;
 using UnityEditor;
 using UnityEngine;
+using UnityAgentBridge.Editor.Tools;
 
 namespace UnityAgentBridge.Editor
 {
@@ -15,6 +17,7 @@ namespace UnityAgentBridge.Editor
 
         private int _portField;
         private string _filter = "";
+        private string _newToolName = "";
         private Vector2 _toolsScroll;
         private Vector2 _logScroll;
         private float _toolsHeight = 200f;
@@ -32,6 +35,9 @@ namespace UnityAgentBridge.Editor
 
         private void OnEnable()
         {
+            // Force the tab label every enable, so a window persisted in an old layout
+            // (titled "MCP Bridge") updates to "Agent Bridge" on the next reload.
+            titleContent = new GUIContent("Agent Bridge");
             _portField = McpBridge.Port;
             _toolsHeight = EditorPrefs.GetFloat(ToolsHeightKey, 200f);
         }
@@ -49,6 +55,10 @@ namespace UnityAgentBridge.Editor
             DrawPortAndControls();
             EditorGUILayout.Space(6);
             DrawCliHints();
+            EditorGUILayout.Space(6);
+            DrawCommands();
+            EditorGUILayout.Space(6);
+            DrawCustomTools();
             EditorGUILayout.Space(6);
 
             DrawToolsHeader();
@@ -69,8 +79,10 @@ namespace UnityAgentBridge.Editor
             using (new EditorGUI.DisabledScope(true))
             {
                 EditorGUILayout.TextField("URL", $"ws://{McpBridge.Host}:{McpBridge.Port}");
-                EditorGUILayout.TextField("Client", McpBridge.ClientConnected ? "connected" : "—");
+                EditorGUILayout.TextField("Client", McpBridge.ClientConnected ? "connected" : "-");
+                EditorGUILayout.TextField("Auth", "token gate (Host + Origin checked)");
             }
+            CopyableRow(BridgeAuth.TokenPath(McpBridge.Port));
         }
 
         private void DrawPortAndControls()
@@ -108,11 +120,112 @@ namespace UnityAgentBridge.Editor
             CopyableRow($"unity-agent-bridge {portArg}list");
         }
 
+        // List the items (by name) under a section, so it shows what's there, not just a count.
+        private static void DrawItemNames(string dir, string pattern, string emptyLabel)
+        {
+            var files = Directory.Exists(dir) ? Directory.GetFiles(dir, pattern) : System.Array.Empty<string>();
+            if (files.Length == 0)
+            {
+                EditorGUILayout.LabelField("    " + emptyLabel, EditorStyles.miniLabel);
+                return;
+            }
+            foreach (var f in files)
+                EditorGUILayout.LabelField("    • " + Path.GetFileNameWithoutExtension(f), EditorStyles.miniLabel);
+        }
+
+        private void DrawCommands()
+        {
+            var dir = CommandTools.CommandsDir;
+            var count = Directory.Exists(dir) ? Directory.GetFiles(dir, "*.json").Length : 0;
+            EditorGUILayout.LabelField($"Custom commands ({count}) - no-code macros, shareable as a .json pack", EditorStyles.boldLabel);
+            DrawItemNames(dir, "*.json", "(no commands yet)");
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("Export pack"))
+                {
+                    CommandTools.ExportCommands(null, null);
+                    EditorUtility.RevealInFinder(CommandTools.DefaultPackPath);
+                }
+                if (GUILayout.Button("Import pack..."))
+                {
+                    var start = Directory.Exists(dir) ? dir : System.Environment.CurrentDirectory;
+                    var p = EditorUtility.OpenFilePanel("Import command pack", start, "json");
+                    if (!string.IsNullOrEmpty(p))
+                    {
+                        var res = CommandTools.ImportCommands(p, false);
+                        Debug.Log($"[McpBridge] import_commands: {Newtonsoft.Json.JsonConvert.SerializeObject(res)}");
+                    }
+                }
+                if (GUILayout.Button("Open folder"))
+                {
+                    Directory.CreateDirectory(dir);
+                    EditorUtility.RevealInFinder(dir);
+                }
+            }
+        }
+
+        private void DrawCustomTools()
+        {
+            var dir = CustomToolTools.CustomToolsDir;
+            var count = Directory.Exists(dir) ? Directory.GetFiles(dir, "*.cs").Length : 0;
+            EditorGUILayout.LabelField($"Custom tools ({count}) - real C# [McpTool]s, shareable as a .json pack", EditorStyles.boldLabel);
+            DrawItemNames(dir, "*.cs", "(no custom tools yet)");
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                _newToolName = EditorGUILayout.TextField("New tool", _newToolName);
+                using (new EditorGUI.DisabledScope(string.IsNullOrWhiteSpace(_newToolName)))
+                {
+                    if (GUILayout.Button("Create", GUILayout.Width(70)))
+                    {
+                        try
+                        {
+                            var res = CustomToolTools.NewCustomTool(_newToolName.Trim(), null, false);
+                            var path = (string)res.GetType().GetProperty("path")?.GetValue(res);
+                            AssetDatabase.Refresh();
+                            if (!string.IsNullOrEmpty(path))
+                            {
+                                var rel = "Assets" + path.Replace(Application.dataPath, "").Replace('\\', '/');
+                                var asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(rel);
+                                if (asset != null) AssetDatabase.OpenAsset(asset);
+                            }
+                            _newToolName = "";
+                            GUI.FocusControl(null);
+                        }
+                        catch (System.Exception e) { Debug.LogError("[McpBridge] new_custom_tool: " + e.Message); }
+                    }
+                }
+            }
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("Export pack"))
+                {
+                    CustomToolTools.ExportTools(null, null);
+                    EditorUtility.RevealInFinder(CustomToolTools.DefaultPackPath);
+                }
+                if (GUILayout.Button("Import pack..."))
+                {
+                    var start = Directory.Exists(dir) ? dir : System.Environment.CurrentDirectory;
+                    var p = EditorUtility.OpenFilePanel("Import tool pack", start, "json");
+                    if (!string.IsNullOrEmpty(p))
+                    {
+                        var res = CustomToolTools.ImportTools(p, false);
+                        AssetDatabase.Refresh();
+                        Debug.Log($"[McpBridge] import_tools: {Newtonsoft.Json.JsonConvert.SerializeObject(res)}");
+                    }
+                }
+                if (GUILayout.Button("Open folder"))
+                {
+                    Directory.CreateDirectory(dir);
+                    EditorUtility.RevealInFinder(dir);
+                }
+            }
+        }
+
         private void DrawToolsHeader()
         {
             using (new EditorGUILayout.HorizontalScope())
             {
-                EditorGUILayout.LabelField("Tools — check = allowed (hover for details)", EditorStyles.boldLabel);
+                EditorGUILayout.LabelField("Tools - check = allowed (hover for details)", EditorStyles.boldLabel);
                 if (GUILayout.Button("All on", EditorStyles.miniButtonLeft, GUILayout.Width(54)))
                     foreach (var t in ToolRegistry.GetToolInfos()) ToolGate.SetEnabled(t.name, true);
                 if (GUILayout.Button("All off", EditorStyles.miniButtonRight, GUILayout.Width(54)))
@@ -197,7 +310,7 @@ namespace UnityAgentBridge.Editor
             {
                 var opt = p.optional ? " (optional)" : "";
                 sb.Append($"\n  {p.name} : {p.type}{opt}");
-                if (!string.IsNullOrEmpty(p.description)) sb.Append(" — ").Append(p.description);
+                if (!string.IsNullOrEmpty(p.description)) sb.Append(" - ").Append(p.description);
             }
             return sb.ToString();
         }
