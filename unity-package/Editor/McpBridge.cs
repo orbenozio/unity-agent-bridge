@@ -1,9 +1,9 @@
-// McpBridge.cs — Editor lifecycle, WebSocket server, main-thread pump, dispatch.
+// McpBridge.cs - Editor lifecycle, WebSocket server, main-thread pump, dispatch.
 //
 // This is the HEART of the project (SPEC §3, §4, §6). It:
 //   - Starts a WebSocket server on ws://127.0.0.1:<port> when the Editor loads.
 //   - Receives requests on a background thread and ENQUEUES them.
-//   - Drains the queue on EditorApplication.update — i.e. the MAIN THREAD —
+//   - Drains the queue on EditorApplication.update - i.e. the MAIN THREAD -
 //     because nearly all Unity APIs require it.
 //   - Tears down cleanly before a domain reload so the socket/port is released;
 //     [InitializeOnLoad] re-runs this ctor on the new domain and restarts it.
@@ -48,15 +48,16 @@ namespace UnityAgentBridge.Editor
             EditorApplication.update += Pump;
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeReload;
 
-            ConsoleTools.Install();   // ring buffer must capture logs from load onward
-            EnsureFastPlayMode();     // so run_playmode doesn't drop the socket on a domain reload
+            ConsoleTools.Install();     // ring buffer must capture logs from load onward
+            CompilationTools.Install();  // capture compile errors for the fix-loop tools
+            EnsureFastPlayMode();       // so run_playmode doesn't drop the socket on a domain reload
             StartServer();
         }
 
         // Entering Play Mode normally triggers a domain reload, which would wipe the
         // bridge (and any in-flight request) mid-call. Disabling domain reload on play
         // keeps the socket and static state alive so run_playmode returns one clean
-        // response. Script recompiles still reload the domain — handled separately.
+        // response. Script recompiles still reload the domain - handled separately.
         private static void EnsureFastPlayMode()
         {
             try
@@ -76,7 +77,7 @@ namespace UnityAgentBridge.Editor
         }
 
         // The bootstrap tool. Every other capability is just another [McpTool]
-        // discovered by ToolRegistry — this one proves the pipe is alive.
+        // discovered by ToolRegistry - this one proves the pipe is alive.
         [McpTool("ping", "Health check; returns the Unity version.")]
         public static object Ping() => new { pong = true, unityVersion = Application.unityVersion };
 
@@ -86,11 +87,20 @@ namespace UnityAgentBridge.Editor
         {
             try
             {
-                _server = new WebSocketServer(Host, Port);
+                // Provision the shared-secret token BEFORE listening, so the server
+                // can read it the moment it connects. Auth is on by default.
+                // Capture port/token HERE on the main thread: the Authorize delegate
+                // runs on the accept (background) thread, where EditorPrefs - which
+                // McpBridge.Port reads via EditorPrefs.GetInt - would throw.
+                var port = Port;
+                var token = BridgeAuth.EnsureToken(port);
+
+                _server = new WebSocketServer(Host, port);
                 _server.OnMessage += HandleMessage;
+                _server.Authorize = headers => BridgeAuth.Validate(headers, token, Host, port);
                 _server.Start();
                 IsListening = true;
-                Debug.Log($"[McpBridge] listening on ws://{Host}:{Port}");
+                Debug.Log($"[McpBridge] listening on ws://{Host}:{port} (auth on; token at {BridgeAuth.TokenPath(port)})");
             }
             catch (Exception e)
             {
@@ -165,7 +175,7 @@ namespace UnityAgentBridge.Editor
             LogActivity(TryGetTool(json));
             _mainThreadJobs.Enqueue(() =>
             {
-                // ToolRegistry replies via `reply` — immediately for sync tools, or later
+                // ToolRegistry replies via `reply` - immediately for sync tools, or later
                 // (from a callback) for async tools that take an McpToolContext.
                 try { ToolRegistry.Invoke(json, reply); }
                 catch (Exception e) { reply(Protocol.Error("", e.ToString())); }

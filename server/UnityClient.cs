@@ -1,4 +1,4 @@
-// UnityClient.cs — the WebSocket pipe from the MCP server to the Unity bridge.
+// UnityClient.cs - the WebSocket pipe from the MCP server to the Unity bridge.
 //
 // Responsibilities (see SPEC.md §4 and §7, MILESTONES M1 & M4):
 //   - Maintain a single ClientWebSocket to ws://127.0.0.1:17890.
@@ -8,6 +8,7 @@
 //   - M4: exponential backoff reconnect + PARK calls made while disconnected.
 
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -20,10 +21,15 @@ public sealed class UnityClient : IAsyncDisposable
 {
     public const int DefaultPort = 17890;
     private readonly string _url;
+    private readonly int _port;
 
-    public UnityClient(int port = DefaultPort) => _url = $"ws://127.0.0.1:{port}";
+    public UnityClient(int port = DefaultPort)
+    {
+        _port = port;
+        _url = $"ws://127.0.0.1:{port}";
+    }
 
-    // How long a call will PARK while (re)connecting before giving up — covers a
+    // How long a call will PARK while (re)connecting before giving up - covers a
     // domain reload (script recompile) where Unity briefly tears the socket down.
     private static readonly TimeSpan ConnectParkTimeout = TimeSpan.FromSeconds(20);
     // How long to wait for Unity's response once connected. Generous because
@@ -96,6 +102,21 @@ public sealed class UnityClient : IAsyncDisposable
                 _ws = null;
 
                 var ws = new ClientWebSocket();
+
+                // Bypass any system/VPN proxy. ClientWebSocket uses the default system
+                // proxy, and a configured proxy/PAC will break a ws://127.0.0.1 connect
+                // ("Unable to connect to the remote server") even though the loopback
+                // port is plainly listening. We always talk to localhost: never proxy.
+                ws.Options.Proxy = null;
+
+                // Present the shared-secret token Unity provisioned for this port.
+                // Read fresh each attempt so we pick it up once the Editor is online.
+                // (.NET's ClientWebSocket sends Host automatically and no Origin, which
+                // is exactly what the bridge's handshake gate requires.)
+                var token = BridgeAuth.ReadToken(_port);
+                if (token is not null)
+                    ws.Options.SetRequestHeader(BridgeAuth.TokenHeader, token);
+
                 try
                 {
                     using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -121,7 +142,8 @@ public sealed class UnityClient : IAsyncDisposable
                         throw new InvalidOperationException(
                             $"Could not connect to the Unity bridge at {_url} within {ConnectParkTimeout.TotalSeconds:0}s. " +
                             "Is the Unity 6 Editor open with the unity-agent-bridge package loaded? " +
-                            $"({last.Message})");
+                            $"If it is, the handshake may have been rejected - check the token at {BridgeAuth.TokenPath(_port)}. " +
+                            $"({Flatten(last)})");
                     }
 
                     await Task.Delay(Math.Min(delayMs, 4000), ct);
@@ -210,6 +232,16 @@ public sealed class UnityClient : IAsyncDisposable
     }
 
     private static void Log(string msg) => Console.Error.WriteLine("[unity-agent-bridge] " + msg);
+
+    // Flatten an exception chain so the REAL cause (often an inner SocketException)
+    // surfaces, not just the generic "Unable to connect to the remote server" wrapper.
+    private static string Flatten(Exception? e)
+    {
+        var parts = new List<string>();
+        for (var cur = e; cur != null; cur = cur.InnerException)
+            parts.Add($"{cur.GetType().Name}: {cur.Message}");
+        return string.Join(" -> ", parts);
+    }
 
     public async ValueTask DisposeAsync()
     {

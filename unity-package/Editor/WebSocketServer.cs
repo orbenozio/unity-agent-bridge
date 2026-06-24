@@ -1,8 +1,8 @@
-// WebSocketServer.cs — minimal RFC6455 server for the Editor side (SPEC §6).
+// WebSocketServer.cs - minimal RFC6455 server for the Editor side (SPEC §6).
 //
 // Deliberately tiny: localhost only, a single text client, no TLS, no auth.
 // Accepts a connection, performs the RFC6455 handshake, then reads/writes text
-// frames. Raises OnMessage(payload, reply) on a BACKGROUND thread — McpBridge is
+// frames. Raises OnMessage(payload, reply) on a BACKGROUND thread - McpBridge is
 // responsible for marshalling work onto Unity's main thread.
 //
 // Assumptions (fine for our protocol, keep it tiny):
@@ -16,7 +16,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading;
 
 namespace UnityAgentBridge.Editor
@@ -38,6 +37,13 @@ namespace UnityAgentBridge.Editor
 
         /// <summary>Raised on a background thread: (textPayload, replyCallback).</summary>
         public event Action<string, Action<string>> OnMessage;
+
+        /// <summary>
+        /// Optional handshake gate. Given the parsed (lower-cased) request headers,
+        /// returns whether the connection is allowed. Set by McpBridge before Start().
+        /// When null, the handshake is unauthenticated (not recommended).
+        /// </summary>
+        public Func<IReadOnlyDictionary<string, string>, BridgeAuth.Result> Authorize;
 
         /// <summary>True while a client is connected (for status display).</summary>
         public bool HasClient => _client != null && _client.Connected;
@@ -77,10 +83,11 @@ namespace UnityAgentBridge.Editor
                 // Single-client policy: drop any previous connection.
                 CloseClient();
 
+                NetworkStream stream = null;
                 try
                 {
                     client.NoDelay = true;
-                    var stream = client.GetStream();
+                    stream = client.GetStream();
                     if (!Handshake(stream))
                     {
                         client.Close();
@@ -93,8 +100,12 @@ namespace UnityAgentBridge.Editor
                         { IsBackground = true, Name = "McpBridge-Read" };
                     reader.Start();
                 }
-                catch
+                catch (Exception ex)
                 {
+                    // Don't let a handshake bug fail silently (it hid a real one once).
+                    // Log the detail to the Console; send the peer only a generic 500.
+                    UnityEngine.Debug.LogError("[McpBridge] handshake failed: " + ex);
+                    try { if (stream != null) WriteHttpError(stream, 500, "handshake error"); } catch { /* ignore */ }
                     try { client.Close(); } catch { /* ignore */ }
                 }
             }
@@ -102,7 +113,7 @@ namespace UnityAgentBridge.Editor
 
         // --- RFC6455 handshake -------------------------------------------------
 
-        private static bool Handshake(NetworkStream stream)
+        private bool Handshake(NetworkStream stream)
         {
             var headerBytes = new List<byte>(512);
             while (true)
@@ -118,10 +129,24 @@ namespace UnityAgentBridge.Editor
             }
 
             var request = Encoding.UTF8.GetString(headerBytes.ToArray());
-            var match = Regex.Match(request, @"Sec-WebSocket-Key:\s*(.+)", RegexOptions.IgnoreCase);
-            if (!match.Success) return false;
+            var headers = ParseHeaders(request);
 
-            var key = match.Groups[1].Value.Trim();
+            // Authorization gate (token + Host pinning + Origin rejection). Reject
+            // BEFORE switching protocols so an attacker gets a plain HTTP error, not
+            // an open socket. See BridgeAuth for the threat model.
+            if (Authorize != null)
+            {
+                var verdict = Authorize(headers);
+                if (!verdict.Ok)
+                {
+                    WriteHttpError(stream, verdict.Status, verdict.Reason);
+                    return false;
+                }
+            }
+
+            if (!headers.TryGetValue("sec-websocket-key", out var key) || string.IsNullOrEmpty(key))
+                return false;
+            key = key.Trim();
             string accept;
             using (var sha1 = SHA1.Create())
             {
@@ -138,6 +163,44 @@ namespace UnityAgentBridge.Editor
             stream.Write(respBytes, 0, respBytes.Length);
             stream.Flush();
             return true;
+        }
+
+        // Parse the request line + headers into a case-insensitive (lower-cased keys)
+        // map. Duplicate headers keep the first value; that's fine for what we read.
+        private static Dictionary<string, string> ParseHeaders(string request)
+        {
+            var headers = new Dictionary<string, string>();
+            var lines = request.Split(new[] { "\r\n" }, StringSplitOptions.None);
+            for (int i = 1; i < lines.Length; i++) // skip the request line
+            {
+                var line = lines[i];
+                if (line.Length == 0) break; // end of headers
+                int colon = line.IndexOf(':');
+                if (colon <= 0) continue;
+                var name = line.Substring(0, colon).Trim().ToLowerInvariant();
+                var value = line.Substring(colon + 1).Trim();
+                if (!headers.ContainsKey(name)) headers[name] = value;
+            }
+            return headers;
+        }
+
+        private static void WriteHttpError(NetworkStream stream, int status, string reason)
+        {
+            string text = status == 401 ? "Unauthorized" : status == 403 ? "Forbidden" : "Bad Request";
+            var body = Encoding.UTF8.GetBytes(reason ?? text);
+            var response =
+                $"HTTP/1.1 {status} {text}\r\n" +
+                "Content-Type: text/plain; charset=utf-8\r\n" +
+                $"Content-Length: {body.Length}\r\n" +
+                "Connection: close\r\n\r\n";
+            try
+            {
+                var head = Encoding.UTF8.GetBytes(response);
+                stream.Write(head, 0, head.Length);
+                stream.Write(body, 0, body.Length);
+                stream.Flush();
+            }
+            catch { /* peer gone */ }
         }
 
         // --- frame read loop ---------------------------------------------------
