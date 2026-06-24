@@ -1,4 +1,4 @@
-// ToolGate.cs — per-tool enable/disable (an allow-list you control from the window).
+// ToolGate.cs - per-tool enable/disable (an allow-list you control from the window).
 //
 // Disabled tools are rejected by ToolRegistry before they run, so the gate applies to
 // BOTH the MCP server and the CLI. State persists in EditorPrefs.

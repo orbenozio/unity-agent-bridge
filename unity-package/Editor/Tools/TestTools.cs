@@ -1,4 +1,4 @@
-// TestTools.cs — run_tests (SPEC §8, MILESTONES M4).
+// TestTools.cs - run_tests (SPEC §8, MILESTONES M4).
 //
 // Uses Unity's TestRunnerApi to run EditMode/PlayMode tests. The API is callback-
 // based; collect results in an ICallbacks implementation and complete the single

@@ -1,7 +1,7 @@
-// GameObjectTools.cs — create_gameobject, add_component (SPEC §8, MILESTONES M3).
+// GameObjectTools.cs - create_gameobject, add_component (SPEC §8, MILESTONES M3).
 //
 // Runs on the main thread (invoked from McpBridge.Pump). Uses Undo so the user can
-// Ctrl+Z anything Claude creates — be a good Editor citizen.
+// Ctrl+Z anything Claude creates - be a good Editor citizen.
 
 using System;
 using System.Reflection;

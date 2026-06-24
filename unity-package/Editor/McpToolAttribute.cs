@@ -1,4 +1,4 @@
-// McpToolAttribute.cs — the one-line extension point (SPEC §6).
+// McpToolAttribute.cs - the one-line extension point (SPEC §6).
 //
 // Mark any static method with [McpTool("name","description")] and it becomes a
 // callable tool. Annotate parameters with [Param("help")] for documentation.

@@ -1,4 +1,4 @@
-// SceneTools.cs — scene/hierarchy editing tools (extension beyond v1's four).
+// SceneTools.cs - scene/hierarchy editing tools (extension beyond v1's four).
 //
 // set_parent, set_rect, set_text, set_property (generic), delete_gameobject, list_scene.
 // All run on the main thread (via McpBridge.Pump) and are Undo-registered.

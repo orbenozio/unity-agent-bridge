@@ -1,4 +1,4 @@
-// Cli.cs — the command-line front-end to the same Unity bridge.
+// Cli.cs - the command-line front-end to the same Unity bridge.
 //
 // Same binary as the MCP server: launched with NO args it is an MCP stdio server
 // (for Claude); launched WITH args it runs a single tool call and prints the result.
@@ -112,7 +112,7 @@ internal static class Cli
     private static void PrintHelp()
     {
         Console.WriteLine(
-@"unity-agent-bridge — CLI for the Unity MCP bridge
+@"unity-agent-bridge - CLI for the Unity MCP bridge
 
 USAGE
   unity-agent-bridge [--port N] <tool> [key=value ...]

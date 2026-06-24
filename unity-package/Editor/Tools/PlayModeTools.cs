@@ -1,7 +1,7 @@
-// PlayModeTools.cs — run_playmode (SPEC §8, MILESTONES M4).
+// PlayModeTools.cs - run_playmode (SPEC §8, MILESTONES M4).
 //
 // Enters Play Mode, schedules an exit after `seconds`, and reports errors logged
-// during play. NON-BLOCKING: never Thread.Sleep — the exit is scheduled via an
+// during play. NON-BLOCKING: never Thread.Sleep - the exit is scheduled via an
 // EditorApplication.update timer and the response completes (ctx.Complete) when Play
 // Mode exits. Relies on Disable-Domain-Reload (set in McpBridge) so the socket and
 // this session survive the play transition.

@@ -1,4 +1,4 @@
-// SystemTools.cs — bridge self-description tools.
+// SystemTools.cs - bridge self-description tools.
 
 using UnityEngine;
 using UnityAgentBridge.Editor;

@@ -1,4 +1,4 @@
-// Program.cs — entry point. Two front-ends over the same Unity bridge:
+// Program.cs - entry point. Two front-ends over the same Unity bridge:
 //   - NO args  -> MCP stdio server (launched by Claude Code).
 //   - WITH args -> CLI: run a single tool call and exit (see Cli.cs).
 //
@@ -17,7 +17,7 @@ if (args.Length > 0)
 // --- MCP stdio server mode ----------------------------------------------------
 var builder = Host.CreateApplicationBuilder(args);
 
-// stdout belongs to the MCP transport — route all logging to stderr.
+// stdout belongs to the MCP transport - route all logging to stderr.
 builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
 
 var port = int.TryParse(Environment.GetEnvironmentVariable("UNITY_BRIDGE_PORT"), out var p)

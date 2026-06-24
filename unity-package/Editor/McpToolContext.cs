@@ -1,9 +1,9 @@
-// McpToolContext.cs — deferred replies for ASYNC tools (SPEC §8: run_playmode, run_tests).
+// McpToolContext.cs - deferred replies for ASYNC tools (SPEC §8: run_playmode, run_tests).
 //
 // Most tools return a value and ToolRegistry replies immediately. Async tools (enter
 // Play Mode for N seconds; run the test runner) finish via a callback LATER. Such a
 // tool declares a trailing `McpToolContext ctx = null` parameter; ToolRegistry injects
-// it and does NOT auto-reply — the tool calls ctx.Complete(...) / ctx.Fail(...) when
+// it and does NOT auto-reply - the tool calls ctx.Complete(...) / ctx.Fail(...) when
 // the operation finishes. The reply fires exactly once.
 
 using System.Threading;

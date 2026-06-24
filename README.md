@@ -1,7 +1,7 @@
 # unity-agent-bridge
 
 A **minimal-yet-real** [MCP](https://modelcontextprotocol.io) server connecting
-**Claude Code** to the **Unity 6 Editor**. Built for a live webinar — small enough to
+**Claude Code** to the **Unity 6 Editor**. Built for a live webinar - small enough to
 read on a slide, real enough to create GameObjects, read the Console, run Play Mode,
 and run tests against a live Editor.
 
@@ -13,7 +13,7 @@ and run tests against a live Editor.
 ## Why another Unity MCP?
 This is **not** trying to out-feature [the big ones](./SPEC.md#0-goals--non-goals).
 It is a teaching scaffold: one language (C#) end to end, four tools done well, and the
-two Unity pain points — domain reload and Play Mode disconnects — solved from day one.
+two Unity pain points - domain reload and Play Mode disconnects - solved from day one.
 
 ## Tools (v1)
 | Tool | What it does |
@@ -51,7 +51,7 @@ marshalling that makes it all work.
 
 ## Status
 ✅ All six tools implemented and verified against a live Unity 6000.3.7f1 Editor
-(M0–M5 complete). Per-milestone status in [`MILESTONES.md`](./MILESTONES.md);
+(M0-M5 complete). Per-milestone status in [`MILESTONES.md`](./MILESTONES.md);
 verification notes in [`TASKS.md`](./TASKS.md).
 
 ## License
