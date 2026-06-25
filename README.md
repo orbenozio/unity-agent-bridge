@@ -9,8 +9,7 @@ then extend it with your own tools and commands to do anything you want.
 > **Claude Code** *(MCP)* or **your terminal** *(CLI)* → **.NET 8 server** ⇄ *(WebSocket)* ⇄ **C# bridge in the Unity Editor**
 
 ## What you can do
-Every capability is one `[McpTool]` method on the Unity side plus a thin forwarder on
-the server. By category:
+By category:
 
 | Category | Tools |
 |---|---|
@@ -18,7 +17,7 @@ the server. By category:
 | Scene & GameObjects | `create_gameobject`, `add_component`, `set_transform`, `set_parent`, `set_rect`, `set_text`, `set_property`, `delete_gameobject`, `list_scene`, `get_object`, `save_scene` |
 | Prefabs & capture | `instantiate_prefab`, `create_prefab`, `capture_screenshot` |
 | Editor control | `execute_menu_item`, `bridge_info`, `unity_status`, `list_tools`, `call_tool` |
-| Extensibility | custom command packs (`list`/`run`/`save`/`new`/`delete`/`export`/`import_commands`) + custom C# tools (`list`/`new`/`delete_custom_tool`, `export`/`import_tools`) |
+| Extensibility | commands (`list_commands`, `run_command`, `save_command`, `new_command`, `delete_command`, `export_commands`, `import_commands`) and custom C# tools (`list_custom_tools`, `new_custom_tool`, `delete_custom_tool`, `export_tools`, `import_tools`) |
 
 ## Setup
 You need **Unity 6**, the **.NET 8 SDK**, and **git**. Five steps:
@@ -37,7 +36,8 @@ package from git URL...**, paste this, and click **Install**:
 ```
 https://github.com/orbenozio/unity-agent-bridge.git?path=/unity-package#v0.1.1
 ```
-The package pulls its own dependencies. When it finishes importing, the Console prints:
+The package pulls its own dependencies. When it finishes importing, the Console shows a
+line starting with:
 ```
 [McpBridge] listening on ws://127.0.0.1:17890
 ```
@@ -81,7 +81,7 @@ process, and any web page via `new WebSocket("ws://127.0.0.1:...")`, can reach i
 handshake is fail-closed and gated by three checks:
 
 - **Shared-secret token.** Auto-provisioned per user/port to `~/.unity-agent-bridge/`
-  (owner-only file permissions); compared in constant time.
+  (locked to your user account); compared in constant time.
 - **Host pinning** against `127.0.0.1`/`localhost` (anti DNS-rebinding).
 - **Origin/Referer rejection** - native clients send neither; a browser sends at least
   one, so browser-originated connections are refused.
