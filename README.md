@@ -35,15 +35,20 @@ cd unity-agent-bridge/server && dotnet build
 ```
 
 **2. Add the package to your Unity project**
-In `<your-project>/Packages/manifest.json`, add under `dependencies` (point the path at
-this repo's `unity-package` folder):
+In `<your-project>/Packages/manifest.json`, add **one line** under `dependencies`. The
+package declares its own dependencies (Newtonsoft.Json, uGUI, Test Framework), so UPM
+pulls them for you - you don't list them.
+
+From GitHub (recommended; pin a tag or branch):
 ```jsonc
-"com.orbenozio.unity-agent-bridge": "file:/abs/path/to/unity-agent-bridge/unity-package",
-"com.unity.nuget.newtonsoft-json": "3.2.1",
-"com.unity.ugui": "2.0.0",
-"com.unity.test-framework": "1.6.0"
+"com.orbenozio.unity-agent-bridge": "https://github.com/orbenozio/unity-agent-bridge.git?path=unity-package#v0.1.0"
 ```
-`newtonsoft-json` and `ugui` are required; add `test-framework` only if you want `run_tests`.
+Or from a local clone (handy while developing the package itself):
+```jsonc
+"com.orbenozio.unity-agent-bridge": "file:/abs/path/to/unity-agent-bridge/unity-package"
+```
+The Git URL needs git on your PATH; `?path=unity-package` points UPM at the package
+subfolder and `#v0.1.0` pins a release. You still build the .NET server from a clone (step 1).
 
 **3. Open the project in Unity 6**
 The package auto-loads. The Console prints
