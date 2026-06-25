@@ -32,7 +32,7 @@
         "com.unity.modules.imgui": "1.0.0"
       }
     },
-    "com.webinar.unity-agent-bridge": {
+    "com.orbenozio.unity-agent-bridge": {
       "version": "file:../../unity-package",
       "depth": 0,
       "source": "local",

@@ -1,4 +1,4 @@
-// ConsoleTools.cs - read_console (SPEC §8, MILESTONES M2). The debugging star.
+// ConsoleTools.cs - read_console. The debugging star.
 //
 // A ring buffer is fed by Application.logMessageReceivedThreaded (installed via
 // ConsoleTools.Install() from McpBridge's static ctor). read_console filters by

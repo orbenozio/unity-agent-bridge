@@ -1,4 +1,4 @@
-// PlayModeTools.cs - run_playmode (SPEC §8, MILESTONES M4).
+// PlayModeTools.cs - run_playmode.
 //
 // Enters Play Mode, schedules an exit after `seconds`, and reports errors logged
 // during play. NON-BLOCKING: never Thread.Sleep - the exit is scheduled via an

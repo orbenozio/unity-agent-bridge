@@ -37,3 +37,9 @@ Thumbs.db
 
 # Screenshots captured by the bridge (runtime output, not source)
 demo-unity-project/UnityAgentBridge/Screenshots/
+
+# Internal planning / design notes - kept locally, not part of the public product
+SPEC.md
+MILESTONES.md
+TASKS.md
+docs/webinar-script.md

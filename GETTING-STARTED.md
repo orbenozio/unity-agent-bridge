@@ -15,7 +15,7 @@ In `<your-project>/Packages/manifest.json`, add under `dependencies` (point the 
 this repo's `unity-package` folder):
 
 ```jsonc
-"com.webinar.unity-agent-bridge": "file:C:/Dev/UnityProjects/unity-agent-bridge/unity-package",
+"com.orbenozio.unity-agent-bridge": "file:/abs/path/to/unity-agent-bridge/unity-package",
 "com.unity.nuget.newtonsoft-json": "3.2.1",
 "com.unity.ugui": "2.0.0",
 "com.unity.test-framework": "1.6.0"
@@ -30,11 +30,18 @@ this repo's `unity-package` folder):
 - Open `Window > Unity Agent Bridge` for the control panel: port, start/stop, per-tool
   permissions, custom commands, and custom tools.
 
-## 3. Register the server with Claude Code
-From your project folder (so the MCP server is scoped to it):
+## 3. Build and register the server with Claude Code
+Build the server once:
 
 ```bash
-claude mcp add unity-agent-bridge -- dotnet run --project "C:/Dev/UnityProjects/unity-agent-bridge/server"
+cd /abs/path/to/unity-agent-bridge/server && dotnet build
+```
+
+Then register the **built DLL** - not `dotnet run`, which can print build output to
+stdout and corrupt the MCP JSON-RPC stream (the server connects but exposes 0 tools):
+
+```bash
+claude mcp add unity-agent-bridge -- dotnet "/abs/path/to/unity-agent-bridge/server/bin/Debug/net8.0/unity-agent-bridge-server.dll"
 ```
 
 One server serves one Editor. If you change the port in the window, set the same value
@@ -71,5 +78,6 @@ Rule of thumb: a fixed sequence of existing tools is a command; anything needing
 
 ## Security note
 The handshake is gated by a shared-secret token, Host-header pinning (anti
-DNS-rebinding), and Origin rejection (blocks browser-originated connections). It is
-localhost-only by design. See [`SPEC.md`](./SPEC.md) section 5.1 for the threat model.
+DNS-rebinding), and Origin rejection (blocks browser-originated connections), and is
+localhost-only by design. File-writing tools are constrained to the project. See the
+Security section in [`README.md`](./README.md) for details.

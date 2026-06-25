@@ -1,11 +1,11 @@
 // UnityClient.cs - the WebSocket pipe from the MCP server to the Unity bridge.
 //
-// Responsibilities (see SPEC.md §4 and §7, MILESTONES M1 & M4):
+// Responsibilities:
 //   - Maintain a single ClientWebSocket to ws://127.0.0.1:17890.
 //   - CallAsync(tool, args): id-correlate request/response via TaskCompletionSource.
 //   - Background receive loop resolves pending calls by id.
-//   - M1: lazy connect on first call + a per-call timeout.
-//   - M4: exponential backoff reconnect + PARK calls made while disconnected.
+//   - Lazy connect on first call + a per-call timeout.
+//   - Exponential backoff reconnect + PARK calls made while disconnected.
 
 using System.Collections.Concurrent;
 using System.Collections.Generic;
