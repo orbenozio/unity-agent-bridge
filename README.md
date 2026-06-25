@@ -41,14 +41,15 @@ pulls them for you - you don't list them.
 
 From GitHub (recommended; pin a tag or branch):
 ```jsonc
-"com.orbenozio.unity-agent-bridge": "https://github.com/orbenozio/unity-agent-bridge.git?path=unity-package#v0.1.0"
+"com.orbenozio.unity-agent-bridge": "https://github.com/orbenozio/unity-agent-bridge.git?path=/unity-package#v0.1.1"
 ```
 Or from a local clone (handy while developing the package itself):
 ```jsonc
 "com.orbenozio.unity-agent-bridge": "file:/abs/path/to/unity-agent-bridge/unity-package"
 ```
-The Git URL needs git on your PATH; `?path=unity-package` points UPM at the package
-subfolder and `#v0.1.0` pins a release. You still build the .NET server from a clone (step 1).
+The Git URL needs git on your PATH; `?path=/unity-package` points UPM at the package
+subfolder and `#v0.1.1` pins a release (use `#main` to track the latest). You still build
+the .NET server from a clone (step 1).
 
 **3. Open the project in Unity 6**
 The package auto-loads. The Console prints

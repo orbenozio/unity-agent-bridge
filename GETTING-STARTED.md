@@ -17,7 +17,7 @@ pulls them for you - you don't list them.
 
 From GitHub (recommended; pin a tag or branch):
 ```jsonc
-"com.orbenozio.unity-agent-bridge": "https://github.com/orbenozio/unity-agent-bridge.git?path=unity-package#v0.1.0"
+"com.orbenozio.unity-agent-bridge": "https://github.com/orbenozio/unity-agent-bridge.git?path=/unity-package#v0.1.1"
 ```
 
 Or from a local clone (for developing the package itself):
@@ -25,8 +25,8 @@ Or from a local clone (for developing the package itself):
 "com.orbenozio.unity-agent-bridge": "file:/abs/path/to/unity-agent-bridge/unity-package"
 ```
 
-The Git URL needs git on your PATH; `?path=unity-package` points UPM at the package
-subfolder, and `#v0.1.0` pins a release.
+The Git URL needs git on your PATH; `?path=/unity-package` points UPM at the package
+subfolder, and `#v0.1.1` pins a release (use `#main` to track the latest).
 
 ## 2. Open the project in Unity
 - The package loads automatically. The Console prints:
