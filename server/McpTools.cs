@@ -109,6 +109,10 @@ public class UnityMcpTools(UnityClient unity)
     public Task<string> save_command(string name, JsonElement steps, string? description = null, JsonElement? parameters = null)
         => unity.CallAsync("save_command", new { name, steps, description, parameters });
 
+    [McpServerTool, Description("Scaffold a new custom command from a template (writes <name>.json). Edit it to add steps.")]
+    public Task<string> new_command(string name, string? description = null, bool overwrite = false)
+        => unity.CallAsync("new_command", new { name, description, overwrite });
+
     [McpServerTool, Description("Delete a project-defined custom command by name.")]
     public Task<string> delete_command(string name)
         => unity.CallAsync("delete_command", new { name });

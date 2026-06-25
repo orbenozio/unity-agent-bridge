@@ -173,6 +173,35 @@ namespace UnityAgentBridge.Editor.Tools
             return new { saved = true, name, path = PathFor(name) };
         }
 
+        [McpTool("new_command", "Scaffold a new custom command from a template (writes <name>.json). Edit it to add your steps.")]
+        public static object NewCommand(
+            [Param("Command name (letters, digits, '_' or '-').")] string name,
+            [Param("Human description.")] string description = null,
+            [Param("Overwrite if it already exists.")] bool overwrite = false)
+        {
+            if (string.IsNullOrEmpty(name) || !NameRx.IsMatch(name))
+                throw new Exception("invalid command name; use letters, digits, '_' or '-'.");
+            if (File.Exists(PathFor(name)) && !overwrite)
+                throw new Exception($"{name}.json already exists (pass overwrite=true to replace it).");
+
+            var cmd = new JObject
+            {
+                ["name"] = name,
+                ["description"] = description ?? $"Custom command {name}",
+                ["params"] = new JArray { new JObject { ["name"] = "example", ["default"] = "value" } },
+                ["steps"] = new JArray
+                {
+                    new JObject
+                    {
+                        ["tool"] = "create_gameobject",
+                        ["args"] = new JObject { ["name"] = "${example}", ["primitive"] = "Cube" },
+                    },
+                },
+            };
+            Persist(cmd);
+            return new { created = true, name, path = PathFor(name) };
+        }
+
         [McpTool("delete_command", "Delete a project-defined custom command by name.")]
         public static object DeleteCommand([Param("Command name.")] string name)
         {

@@ -30,8 +30,20 @@ namespace UnityAgentBridge.Editor
 
         private static readonly ConcurrentQueue<Action> _mainThreadJobs = new();
         private static readonly object _logLock = new object();
-        private static readonly List<string> _recent = new List<string>();
+        private static readonly List<Act> _recent = new List<Act>();
         private static WebSocketServer _server;
+
+        // One activity entry. A class so the reply closure can flip `error` later, even
+        // after the entry has scrolled out of the capped list.
+        private sealed class Act { public string text; public bool error; }
+
+        /// <summary>An activity-log line plus whether that request failed.</summary>
+        public readonly struct ActivityEntry
+        {
+            public readonly string Text;
+            public readonly bool IsError;
+            public ActivityEntry(string text, bool isError) { Text = text; IsError = isError; }
+        }
 
         /// <summary>Configured listen port (persisted in EditorPrefs).</summary>
         public static int Port
@@ -136,9 +148,18 @@ namespace UnityAgentBridge.Editor
 
         // --- activity log (for the Editor window) -------------------------------
 
-        public static string[] RecentActivity
+        public static ActivityEntry[] RecentActivity
         {
-            get { lock (_logLock) return _recent.ToArray(); }
+            get
+            {
+                lock (_logLock)
+                {
+                    var arr = new ActivityEntry[_recent.Count];
+                    for (int i = 0; i < _recent.Count; i++)
+                        arr[i] = new ActivityEntry(_recent[i].text, _recent[i].error);
+                    return arr;
+                }
+            }
         }
 
         public static void ClearActivity()
@@ -146,13 +167,21 @@ namespace UnityAgentBridge.Editor
             lock (_logLock) _recent.Clear();
         }
 
-        private static void LogActivity(string tool)
+        private static Act LogActivity(string tool)
         {
+            var a = new Act { text = $"{DateTime.Now:HH:mm:ss}  {tool}", error = false };
             lock (_logLock)
             {
-                _recent.Add($"{DateTime.Now:HH:mm:ss}  {tool}");
+                _recent.Add(a);
                 if (_recent.Count > 50) _recent.RemoveAt(0);
             }
+            return a;
+        }
+
+        private static bool ResponseIsError(string resp)
+        {
+            try { return JObject.Parse(resp)["ok"]?.Value<bool>() == false; }
+            catch { return false; }
         }
 
         // --- request handling ---------------------------------------------------
@@ -172,13 +201,19 @@ namespace UnityAgentBridge.Editor
         // arg binding and dispatch all live in ToolRegistry (one code path).
         private static void HandleMessage(string json, Action<string> reply)
         {
-            LogActivity(TryGetTool(json));
+            var act = LogActivity(TryGetTool(json));
+            // Wrap the reply so we can mark the activity entry red on a failure.
+            Action<string> tracked = resp =>
+            {
+                if (ResponseIsError(resp)) lock (_logLock) act.error = true;
+                reply(resp);
+            };
             _mainThreadJobs.Enqueue(() =>
             {
-                // ToolRegistry replies via `reply` - immediately for sync tools, or later
+                // ToolRegistry replies via `tracked` - immediately for sync tools, or later
                 // (from a callback) for async tools that take an McpToolContext.
-                try { ToolRegistry.Invoke(json, reply); }
-                catch (Exception e) { reply(Protocol.Error("", e.ToString())); }
+                try { ToolRegistry.Invoke(json, tracked); }
+                catch (Exception e) { tracked(Protocol.Error("", e.ToString())); }
             });
         }
 
