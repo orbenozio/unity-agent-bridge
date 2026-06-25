@@ -34,3 +34,6 @@ Thumbs.db
 
 # Net working-time log (auto-measured via global hooks; also self-ignores)
 .timelog/
+
+# Screenshots captured by the bridge (runtime output, not source)
+demo-unity-project/UnityAgentBridge/Screenshots/

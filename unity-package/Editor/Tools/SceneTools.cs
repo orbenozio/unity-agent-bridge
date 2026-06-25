@@ -94,6 +94,31 @@ namespace UnityAgentBridge.Editor.Tools
             return new { instanceId = go.GetInstanceID(), name = go.name, component = label.GetType().Name, text };
         }
 
+        [McpTool("set_transform", "Set a GameObject's LOCAL position / rotation (euler) / scale. Each is an optional {x,y,z}; omitted axes keep their current value.")]
+        public static object SetTransform(
+            [Param("Target: name or instanceId.")] string target,
+            [Param("Local position {x,y,z}.")] JToken position = null,
+            [Param("Local euler rotation {x,y,z}.")] JToken rotation = null,
+            [Param("Local scale {x,y,z}.")] JToken scale = null)
+        {
+            var go = Resolve(target);
+            var t = go.transform;
+            Undo.RecordObject(t, "MCP SetTransform");
+            if (position is JObject) t.localPosition = ReadVec3(position, t.localPosition);
+            if (rotation is JObject) t.localEulerAngles = ReadVec3(rotation, t.localEulerAngles);
+            if (scale is JObject) t.localScale = ReadVec3(scale, t.localScale);
+            MarkDirty(go);
+
+            return new
+            {
+                instanceId = go.GetInstanceID(),
+                name = go.name,
+                position = V3(t.localPosition),
+                rotation = V3(t.localEulerAngles),
+                scale = V3(t.localScale),
+            };
+        }
+
         [McpTool("set_property", "Set a serialized property on a component (generic). E.g. component=Image property=color value={r,g,b,a}.")]
         public static object SetProperty(
             [Param("Target: name or instanceId.")] string target,
@@ -294,6 +319,12 @@ namespace UnityAgentBridge.Editor.Tools
 
         private static Color ToColor(JToken v) => new Color(F(v, "r"), F(v, "g"), F(v, "b"), v["a"] != null ? F(v, "a") : 1f);
         private static float F(JToken v, string k) => v[k] != null ? v[k].ToObject<float>() : 0f;
+
+        // Read {x,y,z} from JSON, keeping the current value for any axis that is omitted.
+        private static Vector3 ReadVec3(JToken v, Vector3 cur) => new Vector3(
+            v["x"] != null ? v["x"].ToObject<float>() : cur.x,
+            v["y"] != null ? v["y"].ToObject<float>() : cur.y,
+            v["z"] != null ? v["z"].ToObject<float>() : cur.z);
 
         private static void ApplyAnchor(RectTransform rt, string anchor)
         {
