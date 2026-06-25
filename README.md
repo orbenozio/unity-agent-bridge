@@ -20,7 +20,7 @@ By category:
 | Extensibility | commands (`list_commands`, `run_command`, `save_command`, `new_command`, `delete_command`, `export_commands`, `import_commands`) and custom C# tools (`list_custom_tools`, `new_custom_tool`, `delete_custom_tool`, `export_tools`, `import_tools`) |
 
 ## Setup
-You need **Unity 6**, the **.NET 8 SDK**, and **git**. Five steps:
+You need **Unity 6**, the **.NET 8 SDK or newer**, and **git**. Five steps:
 
 **1. Get it and build the server**
 ```bash
