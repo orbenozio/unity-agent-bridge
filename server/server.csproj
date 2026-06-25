@@ -7,6 +7,14 @@
     <Nullable>enable</Nullable>
     <RootNamespace>UnityAgentBridge</RootNamespace>
     <AssemblyName>unity-agent-bridge-server</AssemblyName>
+
+    <!-- Pack the same binary as a .NET global tool, so the CLI (and the MCP server) can
+         install as a clean `unity-agent-bridge` command via `dotnet tool install -g`,
+         instead of being invoked as `dotnet <dll>`. -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>unity-agent-bridge</ToolCommandName>
+    <PackageId>unity-agent-bridge</PackageId>
+    <Version>0.1.1</Version>
   </PropertyGroup>
 
   <ItemGroup>

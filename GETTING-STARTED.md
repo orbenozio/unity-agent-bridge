@@ -48,6 +48,8 @@ stdout and corrupt the MCP JSON-RPC stream (the server connects but exposes 0 to
 ```bash
 claude mcp add unity-agent-bridge -- dotnet "/abs/path/to/unity-agent-bridge/server/bin/Debug/net8.0/unity-agent-bridge-server.dll"
 ```
+If you installed the global tool (step 4), register the bare command instead -
+`claude mcp add unity-agent-bridge -- unity-agent-bridge`.
 
 One server serves one Editor. If you change the port in the window, set the same value
 via `UNITY_BRIDGE_PORT` in the `mcp add` command.
@@ -60,15 +62,21 @@ From **Claude Code** (natural language):
 - After editing a script: `refresh_assets` then `compile_errors` to drive an
   edit-compile-fix loop.
 
-Or straight from the **CLI** - the same built DLL runs one tool call and exits, so every
-tool is scriptable without an agent:
+Or straight from the **CLI** - the same binary runs one tool call and exits, so every
+tool is scriptable without an agent. Install it once as a global command:
 ```bash
-dotnet ".../server/bin/Debug/net8.0/unity-agent-bridge-server.dll" ping
-dotnet ".../unity-agent-bridge-server.dll" create_gameobject name=Player primitive=Cube
-dotnet ".../unity-agent-bridge-server.dll" list      # every tool and its parameters
+cd server
+dotnet pack -c Release
+dotnet tool install --global --add-source ./bin/Release unity-agent-bridge
 ```
-Alias it to `unity-agent-bridge` for `unity-agent-bridge ping`. JSON/number/bool values
-are sent as-is; anything else is a string.
+Then call it anywhere:
+```bash
+unity-agent-bridge ping
+unity-agent-bridge create_gameobject name=Player primitive=Cube
+unity-agent-bridge list      # every tool and its parameters
+```
+JSON/number/bool values are sent as-is; anything else is a string. (Prefer not to
+install? Run the DLL directly: `dotnet ".../bin/Debug/net8.0/unity-agent-bridge-server.dll" ping`.)
 
 ## 5. Extend it: build your own tools and commands
 Two ways to add project-specific capabilities, both shareable between projects:

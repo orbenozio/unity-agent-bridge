@@ -64,6 +64,11 @@ to stdout and corrupt the MCP JSON-RPC stream (the server connects but exposes 0
 ```bash
 claude mcp add unity-agent-bridge -- dotnet "/abs/path/to/unity-agent-bridge/server/bin/Debug/net8.0/unity-agent-bridge-server.dll"
 ```
+Or, if you installed the global tool (see the CLI section below), register the bare
+command instead - same binary, no args means MCP server:
+```bash
+claude mcp add unity-agent-bridge -- unity-agent-bridge
+```
 
 **5. Try it from Claude Code**
 ```
@@ -78,24 +83,34 @@ claude mcp add unity-agent-bridge -- dotnet "/abs/path/to/unity-agent-bridge/ser
 > connected - only the in-Play-Mode work pauses.
 
 ## Use it from the CLI (no agent needed)
-The same built DLL is also a command-line tool - launched with arguments it runs **one
-tool call** and prints the JSON result, then exits. Every tool the agent can call, you
-can call from a shell or script:
+The same binary is also a command-line tool - launched with arguments it runs **one tool
+call**, prints the JSON result, and exits. Every tool the agent can call, you can call
+from a shell or script.
 
+Install it as a global command (recommended):
 ```bash
-dotnet /abs/path/to/server/bin/Debug/net8.0/unity-agent-bridge-server.dll ping
-dotnet .../unity-agent-bridge-server.dll create_gameobject name=Cube primitive=Cube
-dotnet .../unity-agent-bridge-server.dll add_component target=Cube componentType=Rigidbody
-dotnet .../unity-agent-bridge-server.dll set_property target=Cube componentType=Image property=color value={"r":0,"g":1,"b":0,"a":1}
-dotnet .../unity-agent-bridge-server.dll list      # every tool and its parameters
+cd server
+dotnet pack -c Release
+dotnet tool install --global --add-source ./bin/Release unity-agent-bridge
+```
+Then it's a bare command anywhere:
+```bash
+unity-agent-bridge ping
+unity-agent-bridge create_gameobject name=Cube primitive=Cube
+unity-agent-bridge add_component target=Cube componentType=Rigidbody
+unity-agent-bridge set_property target=Cube componentType=Image property=color value={"r":0,"g":1,"b":0,"a":1}
+unity-agent-bridge list      # every tool and its parameters
 ```
 
 Values that look like JSON (`{...}`/`[...]`), numbers, or bools are sent as-is; anything
 else is a string. Port defaults to `17890` (override with `--port N` or
-`$UNITY_BRIDGE_PORT`). Alias it to `unity-agent-bridge` and it reads like a native
-command - ideal for scripts, CI, batch edits, and quick checks without spinning up an
-agent. Same tools, same bridge: use the agent for exploratory work, the CLI for anything
-repeatable.
+`$UNITY_BRIDGE_PORT`). Ideal for scripts, CI, batch edits, and quick checks without an
+agent - same tools, same bridge.
+
+> Update after a rebuild with `dotnet tool update --global --add-source ./bin/Release
+> unity-agent-bridge`; remove with `dotnet tool uninstall --global unity-agent-bridge`.
+> During active development you can skip the install and run the DLL directly:
+> `dotnet bin/Debug/net8.0/unity-agent-bridge-server.dll <tool> [key=value ...]`.
 
 ## Security
 The WebSocket port is localhost-only, but localhost is not a trust boundary - any local
