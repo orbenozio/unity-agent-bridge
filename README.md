@@ -29,19 +29,19 @@ git clone https://github.com/orbenozio/unity-agent-bridge.git
 cd unity-agent-bridge/server && dotnet build
 ```
 
-**2. Add the package to your Unity project**
-Add this one line to your project's `Packages/manifest.json`, under `dependencies`:
-```jsonc
-"com.orbenozio.unity-agent-bridge": "https://github.com/orbenozio/unity-agent-bridge.git?path=/unity-package#v0.1.1"
-```
-That's it - the package pulls its own dependencies. (Use `#main` for the latest instead of a pinned version.)
+**2. Open your project in Unity 6**
 
-**3. Open the project in Unity 6**
-The package loads automatically. Wait for this line in the Console:
+**3. Add the package**
+In Unity, open **Window > Package Manager**, click **+** (top-left), choose **Install
+package from git URL...**, paste this, and click **Install**:
+```
+https://github.com/orbenozio/unity-agent-bridge.git?path=/unity-package#v0.1.1
+```
+The package pulls its own dependencies. When it finishes importing, the Console prints:
 ```
 [McpBridge] listening on ws://127.0.0.1:17890
 ```
-Then enable **Edit > Project Settings > Player > Run In Background**, so tools keep running while the Editor is unfocused.
+Then enable **Edit > Project Settings > Player > Run In Background**, so tools keep running while the Editor is unfocused. (Paste `#main` instead of `#v0.1.1` for the latest version.)
 
 **4. Connect Claude Code**
 ```bash
