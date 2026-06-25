@@ -46,6 +46,11 @@ claude mcp add -s user unity-agent-bridge -- dotnet "<abs>/server/bin/Debug/net8
 #    > capture a screenshot of the scene
 ```
 
+> **Tip:** enable **Edit > Project Settings > Player > Run In Background** (or keep the
+> Editor focused). Unity throttles an unfocused Editor, so a `run_playmode`/`run_tests`
+> call can stall mid-run until you click back into the window. The bridge itself stays
+> connected - only the in-Play-Mode work pauses.
+
 ## Architecture (one diagram)
 ```
 Claude Code ──stdio(MCP)──> .NET server ──WebSocket──> Unity McpBridge ──main thread──> Unity API

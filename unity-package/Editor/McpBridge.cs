@@ -201,7 +201,12 @@ namespace UnityAgentBridge.Editor
         // arg binding and dispatch all live in ToolRegistry (one code path).
         private static void HandleMessage(string json, Action<string> reply)
         {
-            var act = LogActivity(TryGetTool(json));
+            // Parse the request ONCE here and pass the JObject through to dispatch, rather
+            // than re-parsing it to read the tool name and again inside ToolRegistry.
+            JObject root = null;
+            try { root = JObject.Parse(json); } catch { /* malformed - handled below */ }
+
+            var act = LogActivity((string)root?["tool"] ?? "?");
             // Wrap the reply so we can mark the activity entry red on a failure.
             Action<string> tracked = resp =>
             {
@@ -212,15 +217,13 @@ namespace UnityAgentBridge.Editor
             {
                 // ToolRegistry replies via `tracked` - immediately for sync tools, or later
                 // (from a callback) for async tools that take an McpToolContext.
-                try { ToolRegistry.Invoke(json, tracked); }
+                try
+                {
+                    if (root == null) { tracked(Protocol.Error("", "request was not valid JSON")); return; }
+                    ToolRegistry.Invoke(root, tracked);
+                }
                 catch (Exception e) { tracked(Protocol.Error("", e.ToString())); }
             });
-        }
-
-        private static string TryGetTool(string json)
-        {
-            try { return (string)JObject.Parse(json)["tool"] ?? "?"; }
-            catch { return "?"; }
         }
 
         private static void OnBeforeReload()

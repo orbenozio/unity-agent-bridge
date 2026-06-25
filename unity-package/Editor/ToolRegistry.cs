@@ -145,12 +145,23 @@ namespace UnityAgentBridge.Editor
         /// </summary>
         public static void Invoke(string requestJson, Action<string> reply)
         {
+            JObject root;
+            try { root = JObject.Parse(requestJson); }
+            catch (Exception e) { reply(Protocol.Error("", e.ToString())); return; }
+            Invoke(root, reply);
+        }
+
+        /// <summary>
+        /// Same as <see cref="Invoke(string, Action{string})"/> but takes an already-parsed
+        /// request object, so the hot path parses the JSON only once.
+        /// </summary>
+        public static void Invoke(JObject root, Action<string> reply)
+        {
             string id = "";
             McpToolContext ctx = null;
             bool deferred = false;
             try
             {
-                var root = JObject.Parse(requestJson);
                 id = (string)root["id"] ?? "";
                 ctx = new McpToolContext(id, reply);
 

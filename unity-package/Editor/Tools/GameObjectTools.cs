@@ -4,6 +4,7 @@
 // Ctrl+Z anything Claude creates - be a good Editor citizen.
 
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -98,7 +99,25 @@ namespace UnityAgentBridge.Editor.Tools
             return GameObject.Find(target);
         }
 
+        // Memoize resolved component types. Step 3 below scans every type in every
+        // assembly, which is expensive to repeat on the main thread for each call.
+        // The cache is implicitly invalidated by domain reload (a recompile - the only
+        // way new types appear - rebuilds the domain and resets this static).
+        // No lock needed: every tool body (and thus ResolveComponentType) runs on Unity's
+        // main thread via the job pump, so this dictionary is only ever touched single-threaded.
+        private static readonly Dictionary<string, Type> _componentTypeCache =
+            new Dictionary<string, Type>(StringComparer.Ordinal);
+
         internal static Type ResolveComponentType(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+            if (_componentTypeCache.TryGetValue(name, out var cached)) return cached;
+            var resolved = ResolveComponentTypeUncached(name);
+            _componentTypeCache[name] = resolved;
+            return resolved;
+        }
+
+        private static Type ResolveComponentTypeUncached(string name)
         {
             // 1) common case: a UnityEngine component referenced by short name.
             var t = Type.GetType($"UnityEngine.{name}, UnityEngine") ??

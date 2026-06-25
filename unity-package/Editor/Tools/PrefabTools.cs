@@ -45,6 +45,7 @@ namespace UnityAgentBridge.Editor.Tools
                      ?? throw new ArgumentException($"GameObject not found: {target}");
             if (string.IsNullOrEmpty(path) || !path.EndsWith(".prefab"))
                 throw new ArgumentException("path must be an Assets/... path ending in .prefab");
+            path = SafePath.RequireAssetPath(path); // no traversal outside Assets/
 
             var dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);

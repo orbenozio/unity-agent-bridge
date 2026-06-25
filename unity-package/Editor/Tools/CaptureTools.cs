@@ -24,6 +24,14 @@ namespace UnityAgentBridge.Editor.Tools
             [Param("Camera to render: a GameObject name, 'scene' for the Scene view, or empty for the main camera.")] string camera = null)
         {
             if (width < 1 || height < 1) throw new ArgumentException("width and height must be positive");
+            // Cap the dimensions: ReadPixels is a synchronous GPU readback on the main
+            // thread, so a large size both allocates a big RT/Texture2D and stalls the
+            // Editor for the readback + PNG encode. 4096 covers any realistic inspection
+            // screenshot while keeping the worst-case main-thread stall and allocation
+            // bounded (a 4096x4096 RGB24 readback is already ~48 MB).
+            const int MaxDimension = 4096;
+            if (width > MaxDimension || height > MaxDimension)
+                throw new ArgumentException($"width and height must be <= {MaxDimension}");
 
             var cam = ResolveCamera(camera);
             if (cam == null) throw new InvalidOperationException("no camera found to capture (open a Scene view or add a Camera).");
@@ -74,9 +82,9 @@ namespace UnityAgentBridge.Editor.Tools
             UnityEngine.Object.DestroyImmediate(tex);
 
             var outPath = string.IsNullOrEmpty(path)
-                ? Path.Combine(Directory.GetParent(Application.dataPath).FullName,
+                ? Path.Combine(SafePath.ProjectRoot,
                     "UnityAgentBridge", "Screenshots", $"shot_{DateTime.Now:yyyyMMdd_HHmmss}.png")
-                : path;
+                : SafePath.ResolveInProject(path); // keep writes inside the project
             Directory.CreateDirectory(Path.GetDirectoryName(outPath));
             File.WriteAllBytes(outPath, png);
             if (outPath.Replace('\\', '/').Contains("/Assets/")) AssetDatabase.Refresh();

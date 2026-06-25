@@ -24,6 +24,13 @@ namespace UnityAgentBridge.Editor
     {
         private const string MagicGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
+        // DoS guards: both the handshake headers and each frame are bounded by a
+        // client-controlled length field, so cap them before allocating. A localhost
+        // port is reachable by any local process, so a hostile/buggy peer must not be
+        // able to drive an unbounded allocation and OOM the Editor.
+        private const int MaxHeaderBytes = 16 * 1024;        // 16 KB of request headers
+        private const long MaxFrameBytes = 32L * 1024 * 1024; // 32 MB per message frame
+
         private readonly string _host;
         private readonly int _port;
         private readonly object _sendLock = new object();
@@ -39,9 +46,10 @@ namespace UnityAgentBridge.Editor
         public event Action<string, Action<string>> OnMessage;
 
         /// <summary>
-        /// Optional handshake gate. Given the parsed (lower-cased) request headers,
-        /// returns whether the connection is allowed. Set by McpBridge before Start().
-        /// When null, the handshake is unauthenticated (not recommended).
+        /// Handshake gate. Given the parsed (lower-cased) request headers, returns
+        /// whether the connection is allowed. Set by McpBridge before Start(). This is
+        /// FAIL-CLOSED: if it is left null, every handshake is rejected, so an instance
+        /// created on some other path can never open an unauthenticated port.
         /// </summary>
         public Func<IReadOnlyDictionary<string, string>, BridgeAuth.Result> Authorize;
 
@@ -122,6 +130,13 @@ namespace UnityAgentBridge.Editor
                 if (b == -1) return false;
                 headerBytes.Add((byte)b);
                 int n = headerBytes.Count;
+                // Bound the header read: a peer that never sends CRLF CRLF must not be
+                // able to grow this list without limit (OOM before any auth runs).
+                if (n > MaxHeaderBytes)
+                {
+                    WriteHttpError(stream, 431, "request headers too large");
+                    return false;
+                }
                 if (n >= 4 &&
                     headerBytes[n - 4] == 13 && headerBytes[n - 3] == 10 &&
                     headerBytes[n - 2] == 13 && headerBytes[n - 1] == 10)
@@ -133,15 +148,18 @@ namespace UnityAgentBridge.Editor
 
             // Authorization gate (token + Host pinning + Origin rejection). Reject
             // BEFORE switching protocols so an attacker gets a plain HTTP error, not
-            // an open socket. See BridgeAuth for the threat model.
-            if (Authorize != null)
+            // an open socket. Fail-closed: a missing gate denies everything. See
+            // BridgeAuth for the threat model.
+            if (Authorize == null)
             {
-                var verdict = Authorize(headers);
-                if (!verdict.Ok)
-                {
-                    WriteHttpError(stream, verdict.Status, verdict.Reason);
-                    return false;
-                }
+                WriteHttpError(stream, 401, "bridge is not configured for authorization");
+                return false;
+            }
+            var verdict = Authorize(headers);
+            if (!verdict.Ok)
+            {
+                WriteHttpError(stream, verdict.Status, verdict.Reason);
+                return false;
             }
 
             if (!headers.TryGetValue("sec-websocket-key", out var key) || string.IsNullOrEmpty(key))
@@ -255,6 +273,10 @@ namespace UnityAgentBridge.Editor
 
             int opcode = b0 & 0x0F;
             bool masked = (b1 & 0x80) != 0;
+            // RFC6455 §5.3: every client-to-server frame MUST be masked. A peer sending an
+            // unmasked frame is broken or hostile; drop the connection rather than treat
+            // raw bytes as payload. (Returning null tears the connection down upstream.)
+            if (!masked) return null;
             long len = b1 & 0x7F;
 
             if (len == 126)
@@ -271,12 +293,13 @@ namespace UnityAgentBridge.Editor
                 for (int i = 0; i < 8; i++) len = (len << 8) | ext[i];
             }
 
-            byte[] mask = null;
-            if (masked)
-            {
-                mask = ReadExact(stream, 4);
-                if (mask == null) return null;
-            }
+            // Reject before allocating. A 64-bit length is client-controlled: without
+            // this an oversized (or, after the int cast, negative) length would let any
+            // local peer trigger a multi-GB allocation and crash the Editor.
+            if (len < 0 || len > MaxFrameBytes) return null;
+
+            var mask = ReadExact(stream, 4);
+            if (mask == null) return null;
 
             byte[] payload;
             if (len > 0)
@@ -289,10 +312,9 @@ namespace UnityAgentBridge.Editor
                 payload = Array.Empty<byte>();
             }
 
-            // Client frames are masked (RFC6455 §5.3); unmask in place.
-            if (masked)
-                for (int i = 0; i < payload.Length; i++)
-                    payload[i] = (byte)(payload[i] ^ mask[i % 4]);
+            // Client frames are masked (guaranteed above); unmask in place.
+            for (int i = 0; i < payload.Length; i++)
+                payload[i] = (byte)(payload[i] ^ mask[i % 4]);
 
             return new Frame { Opcode = opcode, Payload = payload };
         }
@@ -327,25 +349,29 @@ namespace UnityAgentBridge.Editor
             {
                 try
                 {
-                    var header = new List<byte>(10) { (byte)(0x80 | (opcode & 0x0F)) }; // FIN + opcode
+                    // Header is at most 10 bytes (1 opcode + up to 9 length bytes); build
+                    // it in a fixed stack buffer to avoid a per-reply List/ToArray alloc.
+                    var header = new byte[10];
+                    int h = 0;
+                    header[h++] = (byte)(0x80 | (opcode & 0x0F)); // FIN + opcode
                     int len = payload.Length;
                     if (len <= 125)
                     {
-                        header.Add((byte)len);
+                        header[h++] = (byte)len;
                     }
                     else if (len <= 0xFFFF)
                     {
-                        header.Add(126);
-                        header.Add((byte)((len >> 8) & 0xFF));
-                        header.Add((byte)(len & 0xFF));
+                        header[h++] = 126;
+                        header[h++] = (byte)((len >> 8) & 0xFF);
+                        header[h++] = (byte)(len & 0xFF);
                     }
                     else
                     {
-                        header.Add(127);
-                        for (int i = 7; i >= 0; i--) header.Add((byte)((len >> (8 * i)) & 0xFF));
+                        header[h++] = 127;
+                        for (int i = 7; i >= 0; i--) header[h++] = (byte)((len >> (8 * i)) & 0xFF);
                     }
 
-                    stream.Write(header.ToArray(), 0, header.Count);
+                    stream.Write(header, 0, h);
                     if (len > 0) stream.Write(payload, 0, len);
                     stream.Flush();
                 }

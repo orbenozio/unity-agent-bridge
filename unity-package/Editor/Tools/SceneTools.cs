@@ -172,7 +172,7 @@ namespace UnityAgentBridge.Editor.Tools
         {
             var scene = SceneManager.GetActiveScene();
             var target = !string.IsNullOrEmpty(path)
-                ? path
+                ? SafePath.RequireAssetPath(path) // no traversal outside Assets/
                 : (string.IsNullOrEmpty(scene.path) ? "Assets/Scenes/Main.unity" : scene.path);
 
             var dir = System.IO.Path.GetDirectoryName(target);

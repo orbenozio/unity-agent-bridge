@@ -11,8 +11,9 @@
 //   2. HOST header pinning (anti DNS-rebinding). A malicious site can resolve its
 //      domain to 127.0.0.1, but the browser still sends `Host: attacker.com`. We
 //      accept only 127.0.0.1/localhost:<port> -> everything else is 403.
-//   3. ORIGIN rejection. Native clients (our .NET ClientWebSocket) send no Origin;
-//      browsers always do. Presence of Origin -> 403, killing the browser vector.
+//   3. ORIGIN/REFERER rejection. Native clients (our .NET ClientWebSocket) send
+//      neither header; browsers set at least one. Presence of either -> 403, killing
+//      the browser vector.
 //
 // The token file lives at:  ~/.unity-agent-bridge/bridge-<port>.token
 // computed identically on both sides from SpecialFolder.UserProfile so the .NET 8
@@ -57,9 +58,65 @@ namespace UnityAgentBridge.Editor
             catch { /* unreadable -> regenerate below */ }
 
             var token = NewToken();
-            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            var dir = Path.GetDirectoryName(path);
+            Directory.CreateDirectory(dir);
             File.WriteAllText(path, token);
+            // The token IS the trust boundary; if it is world-readable any other local
+            // user can replay it and drive the bridge (which can compile & run C#).
+            // Lock the file (and its dir) down to the owner. Best-effort: never let a
+            // permissions hiccup fail provisioning.
+            TryRestrictToOwner(dir, path);
             return token;
+        }
+
+        // On Unix-like systems the default umask leaves new files world-readable, so
+        // chmod the token to owner-only. On Windows the user-profile tree already
+        // inherits an owner-restricted ACL, so this is a no-op there.
+        private static void TryRestrictToOwner(string dir, string file)
+        {
+            try
+            {
+                var platform = Environment.OSVersion.Platform;
+                if (platform != PlatformID.Unix && platform != PlatformID.MacOSX) return;
+                RunChmod("700", dir);
+                RunChmod("600", file);
+            }
+            catch { /* permissions are best-effort */ }
+        }
+
+        private static void RunChmod(string mode, string target)
+        {
+            try
+            {
+                // Build argv via ArgumentList, never a single Arguments string: the path
+                // is derived from the user-profile dir, and manual quoting could be broken
+                // by an odd home path to inject extra chmod arguments. ArgumentList passes
+                // each token verbatim with no shell/quote parsing.
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    // Resolve chmod by absolute path so a hostile entry earlier in PATH
+                    // can't shadow it with a malicious binary during provisioning.
+                    FileName = ResolveChmodPath(),
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+                psi.ArgumentList.Add(mode);
+                psi.ArgumentList.Add(target);
+                using var p = System.Diagnostics.Process.Start(psi);
+                // Runs once at token provisioning, not per-handshake; bound the wait so a
+                // stuck chmod can't hang Editor startup.
+                p?.WaitForExit(1000);
+            }
+            catch { /* chmod unavailable - best-effort */ }
+        }
+
+        // Prefer an absolute chmod over the PATH-resolved name; fall back to the bare
+        // name only if neither standard location exists.
+        private static string ResolveChmodPath()
+        {
+            if (File.Exists("/bin/chmod")) return "/bin/chmod";
+            if (File.Exists("/usr/bin/chmod")) return "/usr/bin/chmod";
+            return "chmod";
         }
 
         private static string NewToken()
@@ -88,9 +145,10 @@ namespace UnityAgentBridge.Editor
         /// </summary>
         public static Result Validate(IReadOnlyDictionary<string, string> headers, string expectedToken, string host, int port)
         {
-            // 3. Browser vector: native clients never send Origin.
-            if (headers.ContainsKey("origin"))
-                return Result.Deny(403, "Origin header present (browser-originated connections are not allowed).");
+            // 3. Browser vector: native clients send neither Origin nor Referer; browsers
+            //    set at least one. Presence of either kills the browser-originated path.
+            if (headers.ContainsKey("origin") || headers.ContainsKey("referer"))
+                return Result.Deny(403, "Origin/Referer header present (browser-originated connections are not allowed).");
 
             // 2. Anti DNS-rebinding: pin the Host header to our loopback endpoint.
             if (!headers.TryGetValue("host", out var hostHeader) || !IsAllowedHost(hostHeader, host, port))
@@ -115,16 +173,21 @@ namespace UnityAgentBridge.Editor
                 || hostHeader.Equals($"localhost:{port}", StringComparison.OrdinalIgnoreCase);
         }
 
-        /// <summary>Length-constant string compare to avoid leaking the token via timing.</summary>
+        /// <summary>
+        /// Constant-time compare of a presented token against the expected one. Both
+        /// sides are first hashed to a fixed 32-byte SHA-256 digest, so the byte compare
+        /// is always over 32 bytes regardless of the presented length - this removes the
+        /// length channel entirely - and the compare itself is delegated to the
+        /// platform's vetted constant-time primitive.
+        /// </summary>
         private static bool FixedTimeEquals(string a, string b)
         {
-            if (a == null || b == null) return false;
-            var ba = Encoding.UTF8.GetBytes(a);
-            var bb = Encoding.UTF8.GetBytes(b);
-            if (ba.Length != bb.Length) return false;
-            int diff = 0;
-            for (int i = 0; i < ba.Length; i++) diff |= ba[i] ^ bb[i];
-            return diff == 0;
+            // An empty/absent expected secret is a misconfiguration: never authorize.
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
+            using var sha = SHA256.Create();
+            var ha = sha.ComputeHash(Encoding.UTF8.GetBytes(a)); // attacker-presented
+            var hb = sha.ComputeHash(Encoding.UTF8.GetBytes(b)); // expected secret
+            return CryptographicOperations.FixedTimeEquals(ha, hb);
         }
     }
 }

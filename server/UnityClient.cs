@@ -166,6 +166,10 @@ public sealed class UnityClient : IAsyncDisposable
         finally { _sendLock.Release(); }
     }
 
+    // Bound a single response so a buggy/oversized Unity reply can't grow the buffer
+    // without limit in the server process. Generous: tool results are meant to be terse.
+    private const int MaxMessageBytes = 32 * 1024 * 1024;
+
     private async Task ReceiveLoopAsync(ClientWebSocket ws, CancellationToken ct)
     {
         var buffer = new byte[8192];
@@ -176,12 +180,19 @@ public sealed class UnityClient : IAsyncDisposable
             {
                 sb.Clear();
                 WebSocketReceiveResult result;
+                int bytes = 0;
                 do
                 {
                     result = await ws.ReceiveAsync(buffer, ct);
                     if (result.MessageType == WebSocketMessageType.Close)
                     {
                         OnDisconnected("Unity closed the connection");
+                        return;
+                    }
+                    bytes += result.Count;
+                    if (bytes > MaxMessageBytes)
+                    {
+                        OnDisconnected($"Unity response exceeded {MaxMessageBytes} bytes");
                         return;
                     }
                     sb.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
