@@ -20,97 +20,60 @@ the server. By category:
 | Editor control | `execute_menu_item`, `bridge_info`, `unity_status`, `list_tools`, `call_tool` |
 | Extensibility | custom command packs (`list`/`run`/`save`/`new`/`delete`/`export`/`import_commands`) + custom C# tools (`list`/`new`/`delete_custom_tool`, `export`/`import_tools`) |
 
-## Requirements
-- Unity 6 (6000.x)
-- .NET 8 SDK
-- Claude Code, or any MCP client - optional; the bundled CLI needs neither
-
 ## Setup
-Full walkthrough in [`GETTING-STARTED.md`](./GETTING-STARTED.md). The short version:
+You need **Unity 6**, the **.NET 8 SDK**, and **git**. Five steps:
 
-**1. Build the server**
+**1. Get it and build the server**
 ```bash
 git clone https://github.com/orbenozio/unity-agent-bridge.git
 cd unity-agent-bridge/server && dotnet build
 ```
 
 **2. Add the package to your Unity project**
-In `<your-project>/Packages/manifest.json`, add **one line** under `dependencies`. The
-package declares its own dependencies (Newtonsoft.Json, uGUI, Test Framework), so UPM
-pulls them for you - you don't list them.
-
-From GitHub (recommended; pin a tag or branch):
+Add this one line to your project's `Packages/manifest.json`, under `dependencies`:
 ```jsonc
 "com.orbenozio.unity-agent-bridge": "https://github.com/orbenozio/unity-agent-bridge.git?path=/unity-package#v0.1.1"
 ```
-Or from a local clone (handy while developing the package itself):
-```jsonc
-"com.orbenozio.unity-agent-bridge": "file:/abs/path/to/unity-agent-bridge/unity-package"
-```
-The Git URL needs git on your PATH; `?path=/unity-package` points UPM at the package
-subfolder and `#v0.1.1` pins a release (use `#main` to track the latest). You still build
-the .NET server from a clone (step 1).
+That's it - the package pulls its own dependencies. (Use `#main` for the latest instead of a pinned version.)
 
 **3. Open the project in Unity 6**
-The package auto-loads. The Console prints
-`[McpBridge] listening on ws://127.0.0.1:17890 (auth on; token at ...)`. The auth token is
-created automatically on first run - nothing to configure. Open
-**Window > Unity Agent Bridge** for the control panel (port, start/stop, per-tool
-permissions, custom commands and tools).
+The package loads automatically. Wait for this line in the Console:
+```
+[McpBridge] listening on ws://127.0.0.1:17890
+```
+Then enable **Edit > Project Settings > Player > Run In Background**, so tools keep running while the Editor is unfocused.
 
-**4. Register the server with Claude Code**
-Point Claude at the **built DLL**, not `dotnet run` - `dotnet run` can print build output
-to stdout and corrupt the MCP JSON-RPC stream (the server connects but exposes 0 tools):
+**4. Connect Claude Code**
 ```bash
 claude mcp add unity-agent-bridge -- dotnet "/abs/path/to/unity-agent-bridge/server/bin/Debug/net8.0/unity-agent-bridge-server.dll"
 ```
-Or, if you installed the global tool (see the CLI section below), register the bare
-command instead - same binary, no args means MCP server:
-```bash
-claude mcp add unity-agent-bridge -- unity-agent-bridge
-```
+Use the built `.dll` shown above - not `dotnet run`, which corrupts the connection (you'd see 0 tools).
 
-**5. Try it from Claude Code**
+**5. Use it - just ask Claude**
 ```
 > read the unity console
 > create a cube named Player and add a Rigidbody to it
 > capture a screenshot of the scene
 ```
 
-> **Tip:** enable **Edit > Project Settings > Player > Run In Background** (or keep the
-> Editor focused). Unity throttles an unfocused Editor, so a `run_playmode`/`run_tests`
-> call can stall mid-run until you click back into the window. The bridge stays
-> connected - only the in-Play-Mode work pauses.
-
-## Use it from the CLI (no agent needed)
-The same binary is also a command-line tool - launched with arguments it runs **one tool
-call**, prints the JSON result, and exits. Every tool the agent can call, you can call
-from a shell or script.
-
-Install it as a global command (recommended):
+## Prefer the terminal? Use the CLI
+The same server is also a CLI - no agent needed. Install the command once:
 ```bash
 cd server
 dotnet pack -c Release
 dotnet tool install --global --add-source ./bin/Release unity-agent-bridge
 ```
-Then it's a bare command anywhere:
+Then run any tool from anywhere:
 ```bash
 unity-agent-bridge ping
 unity-agent-bridge create_gameobject name=Cube primitive=Cube
-unity-agent-bridge add_component target=Cube componentType=Rigidbody
-unity-agent-bridge set_property target=Cube componentType=Image property=color value={"r":0,"g":1,"b":0,"a":1}
-unity-agent-bridge list      # every tool and its parameters
+unity-agent-bridge list      # all tools and their parameters
 ```
+Values are sent as their JSON type (`{...}`, numbers, bools); everything else is a string.
+Once installed, you can also connect Claude Code with the short command:
+`claude mcp add unity-agent-bridge -- unity-agent-bridge`.
 
-Values that look like JSON (`{...}`/`[...]`), numbers, or bools are sent as-is; anything
-else is a string. Port defaults to `17890` (override with `--port N` or
-`$UNITY_BRIDGE_PORT`). Ideal for scripts, CI, batch edits, and quick checks without an
-agent - same tools, same bridge.
-
-> Update after a rebuild with `dotnet tool update --global --add-source ./bin/Release
-> unity-agent-bridge`; remove with `dotnet tool uninstall --global unity-agent-bridge`.
-> During active development you can skip the install and run the DLL directly:
-> `dotnet bin/Debug/net8.0/unity-agent-bridge-server.dll <tool> [key=value ...]`.
+Daily use, extending it, and troubleshooting: [`GETTING-STARTED.md`](./GETTING-STARTED.md).
 
 ## Security
 The WebSocket port is localhost-only, but localhost is not a trust boundary - any local
