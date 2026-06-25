@@ -13,6 +13,8 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
@@ -45,11 +47,15 @@ namespace UnityAgentBridge.Editor
             public ActivityEntry(string text, bool isError) { Text = text; IsError = isError; }
         }
 
-        /// <summary>Configured listen port (persisted in EditorPrefs).</summary>
+        /// <summary>
+        /// Configured listen port, persisted PER PROJECT (EditorUserSettings, not the
+        /// global EditorPrefs) so two Editor instances keep separate ports instead of
+        /// fighting over one shared value.
+        /// </summary>
         public static int Port
         {
-            get => EditorPrefs.GetInt(PortPrefKey, DefaultPort);
-            private set => EditorPrefs.SetInt(PortPrefKey, value);
+            get => int.TryParse(EditorUserSettings.GetConfigValue(PortPrefKey), out var p) ? p : DefaultPort;
+            private set => EditorUserSettings.SetConfigValue(PortPrefKey, value.ToString());
         }
 
         public static bool IsListening { get; private set; }
@@ -99,12 +105,27 @@ namespace UnityAgentBridge.Editor
         {
             try
             {
-                // Provision the shared-secret token BEFORE listening, so the server
-                // can read it the moment it connects. Auth is on by default.
-                // Capture port/token HERE on the main thread: the Authorize delegate
-                // runs on the accept (background) thread, where EditorPrefs - which
-                // McpBridge.Port reads via EditorPrefs.GetInt - would throw.
-                var port = Port;
+                // Pick a free port starting at the configured one, so a SECOND Editor
+                // instance lands on the next port instead of silently failing to bind.
+                // The chosen port is persisted (per project) and shown in the window.
+                var desired = Port;
+                var port = FindFreePort(desired, 10);
+                if (port < 0)
+                {
+                    IsListening = false;
+                    Debug.LogError($"[McpBridge] no free port in {desired}-{desired + 9}; bridge not listening.");
+                    return;
+                }
+                if (port != desired)
+                {
+                    Port = port; // remember this project's port for next launch
+                    Debug.Log($"[McpBridge] port {desired} was busy; using {port} for this project.");
+                }
+
+                // Provision the shared-secret token BEFORE listening, so the server can
+                // read it the moment it connects. Auth is on by default. Capture
+                // port/token HERE on the main thread: the Authorize delegate runs on the
+                // accept (background) thread, where EditorUserSettings would throw.
                 var token = BridgeAuth.EnsureToken(port);
 
                 _server = new WebSocketServer(Host, port);
@@ -119,6 +140,28 @@ namespace UnityAgentBridge.Editor
                 IsListening = false;
                 Debug.LogError($"[McpBridge] failed to start server on ws://{Host}:{Port}: {e.Message}");
             }
+        }
+
+        // Probe for a free TCP port: try `start`, then the next ports up to `tries`
+        // candidates, returning the first that binds (then releases it), or -1 if none
+        // are free. This is what lets multiple Editor instances coexist - each grabs its
+        // own port instead of colliding on the default.
+        private static int FindFreePort(int start, int tries)
+        {
+            for (int p = start; p < start + tries && p <= 65535; p++)
+            {
+                if (p < 1024) continue;
+                TcpListener probe = null;
+                try
+                {
+                    probe = new TcpListener(IPAddress.Parse(Host), p);
+                    probe.Start();
+                    return p; // bound -> free
+                }
+                catch (SocketException) { /* in use -> next */ }
+                finally { probe?.Stop(); }
+            }
+            return -1;
         }
 
         public static void Stop()

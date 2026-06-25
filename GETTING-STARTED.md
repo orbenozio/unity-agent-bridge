@@ -17,6 +17,16 @@ unity-agent-bridge create_gameobject name=Player primitive=Cube
 unity-agent-bridge list      # every tool and its parameters
 ```
 
+## Running two Editors at once
+Open a second Unity project and its bridge automatically grabs the next free port
+(17891, 17892, ...) - check the actual port in **Window > Unity Agent Bridge**. Each
+Editor keeps its own port and token, so two agent sessions never interfere. Register the
+second session's MCP server with the matching port:
+```bash
+claude mcp add unity-b -e UNITY_BRIDGE_PORT=17891 -- dotnet ".../bin/Debug/net8.0/unity-agent-bridge-server.dll"
+```
+For the CLI, pass `--port 17891` (the window shows the exact command for its port).
+
 ## Extend it: your own tools and commands
 Two ways, both shareable between projects:
 - **Commands** (no code) - a named macro of existing tool calls with `${param}`
