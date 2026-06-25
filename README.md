@@ -1,11 +1,12 @@
 # unity-agent-bridge
 
 Drive the **Unity 6 Editor** from **Claude Code** (or any [MCP](https://modelcontextprotocol.io)
-client). A small .NET server speaks MCP to the agent and WebSocket to a C# package
-running inside the Editor, so an agent can build scenes, edit objects, run Play Mode,
-run tests, and capture screenshots against a live Editor - and grow new tools you define.
+client) **and straight from your terminal** - the one built server is both an MCP server
+and a CLI. It talks to a C# package running inside the Editor, so you can build scenes,
+edit objects, run Play Mode, run tests, and capture screenshots against a live Editor -
+then extend it with your own tools and commands to do anything you want.
 
-> Claude Code ⇄ *(MCP / stdio)* ⇄ **.NET 8 server** ⇄ *(WebSocket)* ⇄ **C# bridge in the Unity Editor**
+> **Claude Code** *(MCP)* or **your terminal** *(CLI)* → **.NET 8 server** ⇄ *(WebSocket)* ⇄ **C# bridge in the Unity Editor**
 
 ## What you can do
 Every capability is one `[McpTool]` method on the Unity side plus a thin forwarder on
@@ -22,7 +23,7 @@ the server. By category:
 ## Requirements
 - Unity 6 (6000.x)
 - .NET 8 SDK
-- Claude Code CLI (or any MCP client)
+- Claude Code, or any MCP client - optional; the bundled CLI needs neither
 
 ## Setup
 Full walkthrough in [`GETTING-STARTED.md`](./GETTING-STARTED.md). The short version:
@@ -70,6 +71,26 @@ claude mcp add unity-agent-bridge -- dotnet "/abs/path/to/unity-agent-bridge/ser
 > call can stall mid-run until you click back into the window. The bridge stays
 > connected - only the in-Play-Mode work pauses.
 
+## Use it from the CLI (no agent needed)
+The same built DLL is also a command-line tool - launched with arguments it runs **one
+tool call** and prints the JSON result, then exits. Every tool the agent can call, you
+can call from a shell or script:
+
+```bash
+dotnet /abs/path/to/server/bin/Debug/net8.0/unity-agent-bridge-server.dll ping
+dotnet .../unity-agent-bridge-server.dll create_gameobject name=Cube primitive=Cube
+dotnet .../unity-agent-bridge-server.dll add_component target=Cube componentType=Rigidbody
+dotnet .../unity-agent-bridge-server.dll set_property target=Cube componentType=Image property=color value={"r":0,"g":1,"b":0,"a":1}
+dotnet .../unity-agent-bridge-server.dll list      # every tool and its parameters
+```
+
+Values that look like JSON (`{...}`/`[...]`), numbers, or bools are sent as-is; anything
+else is a string. Port defaults to `17890` (override with `--port N` or
+`$UNITY_BRIDGE_PORT`). Alias it to `unity-agent-bridge` and it reads like a native
+command - ideal for scripts, CI, batch edits, and quick checks without spinning up an
+agent. Same tools, same bridge: use the agent for exploratory work, the CLI for anything
+repeatable.
+
 ## Security
 The WebSocket port is localhost-only, but localhost is not a trust boundary - any local
 process, and any web page via `new WebSocket("ws://127.0.0.1:...")`, can reach it. The
@@ -84,21 +105,36 @@ handshake is fail-closed and gated by three checks:
 File-writing tools (screenshots, prefabs, scenes) are constrained to the project by a
 path-traversal guard that rejects `..` escapes and symlink/junction crossings.
 
-## Extending it for your project
-Two ways to add project-specific capabilities, both shareable between projects:
+## Build anything: your own tools & commands
+The built-in tools are the starting point, not the ceiling. Add your own capabilities -
+tailored to your project, your workflow, your team - and **both the agent and the CLI
+call them exactly like the built-ins**. Everything is shareable: export to a single JSON
+file, drop it into another project, import.
 
-- **Custom commands** (no code) - a named macro of existing tool calls with `${param}`
-  substitution. Create with `save_command`; share with `export_commands`/`import_commands`.
-- **Custom tools** (real C#) - a `[McpTool]` method with full logic. Scaffold with
-  `new_custom_tool` or the window; call via `call_tool`; share with
-  `export_tools`/`import_tools`.
+- **Custom commands - no code.** A named, parameterized macro of existing tool calls,
+  stored as a small JSON file (`${param}` substitution, JSON type preserved). Author it
+  with `save_command`, by hand, or from the Editor window; run it with `run_command`;
+  share with `export_commands`/`import_commands`. Perfect for repeatable setups - "spawn
+  a player", "lay out the main menu", "reset the scene".
 
-Rule of thumb: a fixed sequence of existing tools is a command; anything needing logic
-(loops, conditionals, Unity APIs the tools do not expose) is a tool.
+- **Custom tools - real C#, full power.** Any `[McpTool]` static method you add
+  auto-registers on the next compile (the bridge scans every loaded assembly) and is
+  immediately callable via `call_tool` - **no server-side wiring at all**. Scaffold with
+  `new_custom_tool` (or the window), drop your logic into
+  `Assets/UnityAgentBridge/CustomTools/Editor/<name>.cs` (no asmdef needed), share with
+  `export_tools`/`import_tools` - the C# source travels inside the pack. If Unity's API
+  can do it - loops, conditionals, editor automation, asset pipelines - a tool can do it.
+
+Rule of thumb: a fixed sequence of existing tools is a command; anything needing real
+logic is a tool. The demo ships a `create_button` custom tool (ensures a
+Canvas/EventSystem and builds a uGUI button - logic a flat command can't express),
+composed by a `main_menu` command into Play / Settings / Quit.
 
 ## Architecture
 ```
-Claude Code ──stdio(MCP)──> .NET server ──WebSocket──> Unity McpBridge ──main thread──> Unity API
+Claude Code (MCP/stdio) ─┐
+                         ├─> .NET server ──WebSocket──> Unity McpBridge ──main thread──> Unity API
+Terminal / CI (CLI) ─────┘
 ```
 The server is a thin, fast pipe - all behavior lives in the Unity package. Every Unity
 API call is marshalled onto the Editor's main thread via a job queue drained in

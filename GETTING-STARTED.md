@@ -47,14 +47,25 @@ claude mcp add unity-agent-bridge -- dotnet "/abs/path/to/unity-agent-bridge/ser
 One server serves one Editor. If you change the port in the window, set the same value
 via `UNITY_BRIDGE_PORT` in the `mcp add` command.
 
-## 4. Basic usage (from Claude Code)
+## 4. Basic usage
+From **Claude Code** (natural language):
 - `read the unity console` - live debugging.
 - `create a cube named Player and add a Rigidbody` - build scene content.
 - `run the edit-mode tests` - run tests.
 - After editing a script: `refresh_assets` then `compile_errors` to drive an
   edit-compile-fix loop.
 
-## 5. Extend it for your project
+Or straight from the **CLI** - the same built DLL runs one tool call and exits, so every
+tool is scriptable without an agent:
+```bash
+dotnet ".../server/bin/Debug/net8.0/unity-agent-bridge-server.dll" ping
+dotnet ".../unity-agent-bridge-server.dll" create_gameobject name=Player primitive=Cube
+dotnet ".../unity-agent-bridge-server.dll" list      # every tool and its parameters
+```
+Alias it to `unity-agent-bridge` for `unity-agent-bridge ping`. JSON/number/bool values
+are sent as-is; anything else is a string.
+
+## 5. Extend it: build your own tools and commands
 Two ways to add project-specific capabilities, both shareable between projects:
 
 - **Custom commands** (no code): a named macro of existing tool calls with `${param}`
