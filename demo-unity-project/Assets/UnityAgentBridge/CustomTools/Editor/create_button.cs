@@ -28,7 +28,7 @@ namespace UnityAgentBridge.Editor.CustomTools
             [Param("Anchored Y.")] float y = 0f)
         {
             // A clickable UI needs an EventSystem in the scene.
-            if (Object.FindObjectOfType<EventSystem>() == null)
+            if (Object.FindFirstObjectByType<EventSystem>() == null)
             {
                 var es = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
                 Undo.RegisterCreatedObjectUndo(es, "MCP EventSystem");
@@ -36,7 +36,7 @@ namespace UnityAgentBridge.Editor.CustomTools
 
             // Resolve a parent, and make sure there is a Canvas to live under.
             var parentGo = string.IsNullOrEmpty(parent) ? null : GameObject.Find(parent);
-            var canvas = parentGo != null ? parentGo.GetComponentInParent<Canvas>() : Object.FindObjectOfType<Canvas>();
+            var canvas = parentGo != null ? parentGo.GetComponentInParent<Canvas>() : Object.FindFirstObjectByType<Canvas>();
             if (canvas == null)
             {
                 var cgo = new GameObject("Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));

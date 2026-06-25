@@ -88,7 +88,7 @@ namespace UnityAgentBridge.Editor.Tools
             // instanceId path
             if (int.TryParse(target, out var id))
             {
-                var obj = EditorUtility.InstanceIDToObject(id);
+                var obj = EditorUtility.EntityIdToObject(id);
                 if (obj is GameObject g) return g;
                 if (obj is Component c) return c.gameObject;
                 return null;
