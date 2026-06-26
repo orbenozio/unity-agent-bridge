@@ -119,11 +119,11 @@ namespace UnityAgentBridge.Editor.Tools
             };
         }
 
-        [McpTool("set_property", "Set a serialized property on a component (generic). E.g. component=Image property=color value={r,g,b,a}.")]
+        [McpTool("set_property", "Set a serialized property on a component (generic). property accepts the public name (color, renderMode), the serialized name (m_Color), or an alias; the tool maps the public name to Unity's m_ convention. E.g. component=Image property=color value={r,g,b,a}.")]
         public static object SetProperty(
             [Param("Target: name or instanceId.")] string target,
             [Param("Component type, e.g. Image, Text, Button, Camera.")] string componentType,
-            [Param("Property: a serialized name (m_Color) or an alias (color, text, fontSize, enabled).")] string property,
+            [Param("Property: public name (color, renderMode), serialized name (m_Color), or alias (fontSize). Public names auto-map to m_Name.")] string property,
             [Param("Value: number, bool, string, or {r,g,b,a}/{x,y,z}.")] JToken value)
         {
             var go = Resolve(target);
@@ -132,15 +132,55 @@ namespace UnityAgentBridge.Editor.Tools
             var comp = go.GetComponent(type) ?? throw new ArgumentException($"{go.name} has no {type.Name}");
 
             var so = new SerializedObject(comp);
-            var propName = MapAlias(property);
-            var sp = so.FindProperty(propName)
-                     ?? throw new ArgumentException($"serialized property not found: {property} (tried {propName})");
+            var sp = ResolveProperty(so, property, out var propName)
+                     ?? throw new ArgumentException(
+                         $"serialized property not found: {property} (tried {string.Join(", ", PropertyCandidates(property))})");
 
             ApplyJson(sp, value);
             so.ApplyModifiedProperties();
             MarkDirty(go);
 
             return new { target = go.name, component = type.Name, property = propName, propertyType = sp.propertyType.ToString() };
+        }
+
+        [McpTool("set_color", "Set a color from a hex string (#RGB, #RRGGBB, or #RRGGBBAA; leading # optional; named colors like 'red' also work). Auto-targets a UI Graphic (Image/Text/RawImage) or a SpriteRenderer; pass componentType to set m_Color on a specific component.")]
+        public static object SetColor(
+            [Param("Target: name or instanceId.")] string target,
+            [Param("Hex color: #RGB, #RRGGBB, or #RRGGBBAA (leading # optional). Named colors (red, white) also work.")] string hex,
+            [Param("Optional component type, e.g. Image, Text, SpriteRenderer. Default: auto-detect a Graphic or SpriteRenderer.")] string componentType = null)
+        {
+            var go = Resolve(target);
+            var color = ParseHexColor(hex);
+
+            string applied;
+            if (!string.IsNullOrEmpty(componentType))
+            {
+                var type = GameObjectTools.ResolveComponentType(componentType)
+                           ?? throw new ArgumentException($"component type not found: {componentType}");
+                var comp = go.GetComponent(type) ?? throw new ArgumentException($"{go.name} has no {type.Name}");
+                Undo.RecordObject(comp, "MCP SetColor");
+                if (!ApplyColor(comp, color))
+                    throw new ArgumentException($"{type.Name} has no color (m_Color) to set");
+                applied = type.Name;
+            }
+            else
+            {
+                var comp = (Component)go.GetComponent<Graphic>() ?? go.GetComponent<SpriteRenderer>();
+                if (comp == null)
+                    throw new ArgumentException($"{go.name} has no Graphic or SpriteRenderer; pass componentType to target a specific component.");
+                Undo.RecordObject(comp, "MCP SetColor");
+                ApplyColor(comp, color);
+                applied = comp.GetType().Name;
+            }
+
+            MarkDirty(go);
+            return new
+            {
+                target = go.name,
+                component = applied,
+                color = $"({color.r:0.##},{color.g:0.##},{color.b:0.##},{color.a:0.##})",
+                hex = "#" + ColorUtility.ToHtmlStringRGBA(color),
+            };
         }
 
         [McpTool("delete_gameobject", "Delete a GameObject (Undo-able).")]
@@ -182,6 +222,44 @@ namespace UnityAgentBridge.Editor.Tools
             var ok = EditorSceneManager.SaveScene(scene, target);
             AssetDatabase.Refresh();
             return new { saved = ok, path = scene.path, name = scene.name };
+        }
+
+        [McpTool("new_scene", "Create a new scene in the Editor. setup='default' (Main Camera + Directional Light) or 'empty'. mode='single' (replace open scenes) or 'additive'. Optional path saves it to disk. Single mode discards unsaved changes in the current scene.")]
+        public static object NewScene(
+            [Param("Setup: 'default' (Main Camera + Directional Light) or 'empty'.")] string setup = "default",
+            [Param("Mode: 'single' (replace open scenes) or 'additive' (open alongside).")] string mode = "single",
+            [Param("Optional asset path to save the new scene, e.g. Assets/Scenes/Level2.unity.")] string path = null)
+        {
+            var sceneSetup = string.Equals(setup, "empty", StringComparison.OrdinalIgnoreCase)
+                ? NewSceneSetup.EmptyScene
+                : NewSceneSetup.DefaultGameObjects;
+            var sceneMode = string.Equals(mode, "additive", StringComparison.OrdinalIgnoreCase)
+                ? NewSceneMode.Additive
+                : NewSceneMode.Single;
+
+            var scene = EditorSceneManager.NewScene(sceneSetup, sceneMode);
+
+            string savedPath = null;
+            if (!string.IsNullOrEmpty(path))
+            {
+                var target = SafePath.RequireAssetPath(path); // no traversal outside Assets/
+                var dir = System.IO.Path.GetDirectoryName(target);
+                if (!string.IsNullOrEmpty(dir) && !System.IO.Directory.Exists(dir))
+                    System.IO.Directory.CreateDirectory(dir);
+                EditorSceneManager.SaveScene(scene, target);
+                AssetDatabase.Refresh();
+                savedPath = scene.path;
+            }
+
+            return new
+            {
+                created = true,
+                name = scene.name,
+                path = savedPath,
+                setup = sceneSetup.ToString(),
+                mode = sceneMode.ToString(),
+                rootCount = scene.rootCount,
+            };
         }
 
         [McpTool("get_object", "Inspect a GameObject: transform + each component's serialized properties (capped).")]
@@ -288,17 +366,37 @@ namespace UnityAgentBridge.Editor.Tools
         private static GameObject Resolve(string target)
             => GameObjectTools.ResolveTarget(target) ?? throw new ArgumentException($"GameObject not found: {target}");
 
-        private static string MapAlias(string property)
+        // Irregular/nested public->serialized names the simple "m_ + Capitalize" rule can't derive.
+        // (color/text/enabled etc. need no entry - they fall out of the heuristic below.)
+        private static readonly Dictionary<string, string> PropertyAliases = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            switch (property)
+            { "fontSize", "m_FontData.m_FontSize" },
+            { "fontStyle", "m_FontData.m_FontStyle" },
+            { "alignment", "m_FontData.m_Alignment" },
+            { "lineSpacing", "m_FontData.m_LineSpacing" },
+        };
+
+        // Candidate serialized names for a property, in priority order:
+        // 1) a known alias (nested/irregular), 2) the name as given (already m_X or directly findable),
+        // 3) the m_ + Capitalized public-name convention (renderMode -> m_RenderMode, color -> m_Color).
+        private static IEnumerable<string> PropertyCandidates(string property)
+        {
+            if (PropertyAliases.TryGetValue(property, out var aliased)) yield return aliased;
+            yield return property;
+            if (property.Length > 0 && !property.StartsWith("m_"))
+                yield return "m_" + char.ToUpperInvariant(property[0]) + property.Substring(1);
+        }
+
+        // First candidate that resolves wins; resolvedName is the serialized path that matched.
+        private static SerializedProperty ResolveProperty(SerializedObject so, string property, out string resolvedName)
+        {
+            foreach (var name in PropertyCandidates(property))
             {
-                case "color": return "m_Color";
-                case "text": return "m_Text";
-                case "fontSize": return "m_FontData.m_FontSize";
-                case "enabled": return "m_Enabled";
-                case "interactable": return "m_Interactable";
-                default: return property;
+                var sp = so.FindProperty(name);
+                if (sp != null) { resolvedName = name; return sp; }
             }
+            resolvedName = null;
+            return null;
         }
 
         private static void ApplyJson(SerializedProperty sp, JToken value)
@@ -319,6 +417,33 @@ namespace UnityAgentBridge.Editor.Tools
 
         private static Color ToColor(JToken v) => new Color(F(v, "r"), F(v, "g"), F(v, "b"), v["a"] != null ? F(v, "a") : 1f);
         private static float F(JToken v, string k) => v[k] != null ? v[k].ToObject<float>() : 0f;
+
+        private static Color ParseHexColor(string hex)
+        {
+            if (string.IsNullOrWhiteSpace(hex)) throw new ArgumentException("hex color is empty");
+            var s = hex.Trim();
+            if (!s.StartsWith("#") && System.Text.RegularExpressions.Regex.IsMatch(s, "^[0-9a-fA-F]{3,8}$"))
+                s = "#" + s; // bare hex digits get the leading # (named colors pass through as-is)
+            if (ColorUtility.TryParseHtmlString(s, out var c)) return c;
+            throw new ArgumentException($"invalid color: {hex} (expected #RGB, #RRGGBB, #RRGGBBAA, or a named color)");
+        }
+
+        // Set a color on a component: Graphic/SpriteRenderer directly, else m_Color via SerializedObject. False = no color to set.
+        private static bool ApplyColor(Component comp, Color color)
+        {
+            switch (comp)
+            {
+                case Graphic g: g.color = color; return true;
+                case SpriteRenderer sr: sr.color = color; return true;
+                default:
+                    var so = new SerializedObject(comp);
+                    var sp = so.FindProperty("m_Color");
+                    if (sp == null || sp.propertyType != SerializedPropertyType.Color) return false;
+                    sp.colorValue = color;
+                    so.ApplyModifiedProperties();
+                    return true;
+            }
+        }
 
         // Read {x,y,z} from JSON, keeping the current value for any axis that is omitted.
         private static Vector3 ReadVec3(JToken v, Vector3 cur) => new Vector3(

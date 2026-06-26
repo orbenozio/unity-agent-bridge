@@ -58,6 +58,10 @@ public class UnityMcpTools(UnityClient unity)
 
     // --- scene/UI editing (extension tools) ---------------------------------
 
+    [McpServerTool, Description("Create a UI Canvas correctly in one call: a Screen Space - Overlay Canvas + CanvasScaler (Scale With Screen Size, 1920x1080) + GraphicRaycaster, plus an EventSystem (new Input System module when that package is installed, else StandaloneInputModule) if the scene has none. Avoids the create_gameobject + add_component sequence that defaults Canvas to World Space.")]
+    public Task<string> create_canvas(string name = "Canvas")
+        => unity.CallAsync("create_canvas", new { name });
+
     [McpServerTool, Description("Reparent a GameObject under another (empty/null parent = scene root).")]
     public Task<string> set_parent(string target, string? parent = null, bool keepWorldPosition = false)
         => unity.CallAsync("set_parent", new { target, parent, keepWorldPosition });
@@ -70,9 +74,13 @@ public class UnityMcpTools(UnityClient unity)
     public Task<string> set_text(string target, string text)
         => unity.CallAsync("set_text", new { target, text });
 
-    [McpServerTool, Description("Set any serialized property on a component (generic). property accepts aliases: color, text, fontSize, enabled, interactable. value is a number, bool, string, or {r,g,b,a}/{x,y,z}.")]
+    [McpServerTool, Description("Set any serialized property on a component (generic). property accepts the public name (color, renderMode), the serialized name (m_Color), or an alias (fontSize) - public names auto-map to Unity's m_ convention. value is a number, bool, string, or {r,g,b,a}/{x,y,z}.")]
     public Task<string> set_property(string target, string componentType, string property, JsonElement? value = null)
         => unity.CallAsync("set_property", new { target, componentType, property, value });
+
+    [McpServerTool, Description("Set a color from a hex string (#RGB, #RRGGBB, or #RRGGBBAA; leading # optional; named colors like 'red' also work). Auto-targets a UI Graphic (Image/Text/RawImage) or a SpriteRenderer; pass componentType to set m_Color on a specific component.")]
+    public Task<string> set_color(string target, string hex, string? componentType = null)
+        => unity.CallAsync("set_color", new { target, hex, componentType });
 
     [McpServerTool, Description("Delete a GameObject by name or instanceId (Undo-able).")]
     public Task<string> delete_gameobject(string target)
@@ -85,6 +93,10 @@ public class UnityMcpTools(UnityClient unity)
     [McpServerTool, Description("Save the active scene to disk (gives an unsaved scene a path so it survives Play Mode). Optional asset path.")]
     public Task<string> save_scene(string? path = null)
         => unity.CallAsync("save_scene", new { path });
+
+    [McpServerTool, Description("Create a new scene in the Editor. setup='default' (Main Camera + Directional Light) or 'empty'. mode='single' (replace open scenes) or 'additive'. Optional path saves it to disk. Single mode discards unsaved changes in the current scene.")]
+    public Task<string> new_scene(string setup = "default", string mode = "single", string? path = null)
+        => unity.CallAsync("new_scene", new { setup, mode, path });
 
     [McpServerTool, Description("Inspect a GameObject by name or instanceId: transform + each component's serialized properties (capped).")]
     public Task<string> get_object(string target)
