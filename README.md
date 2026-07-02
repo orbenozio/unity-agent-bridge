@@ -20,12 +20,11 @@ By category:
 | Extensibility | commands (`list_commands`, `run_command`, `save_command`, `new_command`, `delete_command`, `export_commands`, `import_commands`) and custom C# tools (`list_custom_tools`, `new_custom_tool`, `delete_custom_tool`, `export_tools`, `import_tools`) |
 
 ## Setup
-You need **Unity 6**, the **.NET 8 SDK or newer**, and **git**. Five steps:
+You need **Unity 6**, the **.NET 8 SDK or newer**, and **git**.
 
-**1. Get it and build the server**
+**1. Get it**
 ```bash
 git clone https://github.com/orbenozio/unity-agent-bridge.git
-cd unity-agent-bridge/server && dotnet build
 ```
 
 **2. Open your project in Unity 6**
@@ -34,32 +33,26 @@ cd unity-agent-bridge/server && dotnet build
 In Unity, open **Window > Package Manager**, click **+** (top-left), choose **Install
 package from git URL...**, paste this, and click **Install**:
 ```
-https://github.com/orbenozio/unity-agent-bridge.git?path=/unity-package#v0.1.1
+https://github.com/orbenozio/unity-agent-bridge.git?path=/unity-package#v0.2.1
 ```
 The package pulls its own dependencies. When it finishes importing, the Console shows a
-line starting with:
+line like:
 ```
 [McpBridge] listening on ws://127.0.0.1:17890
 ```
-Then enable **Edit > Project Settings > Player > Run In Background**, so tools keep running while the Editor is unfocused. (Paste `#main` instead of `#v0.1.1` for the latest version.)
+`17890` is the default, but if it's taken (another Editor already open) the bridge
+auto-picks the next free port (17891, 17892, ...). The **actual** port is the one in that
+log line and in **Window > Unity Agent Bridge** - don't assume 17890. When several
+projects run at once, target each by name with the CLI's `--project` flag instead of a
+fixed port (see [GETTING-STARTED](./GETTING-STARTED.md#running-two-editors-at-once)).
 
-**4. Connect Claude Code**
+Then enable **Edit > Project Settings > Player > Run In Background**, so tools keep running while the Editor is unfocused. (Paste `#main` instead of `#v0.2.1` for the latest version.)
+
+**4. Install the CLI**
+This is the default way to drive the bridge: a normal terminal command the agent runs
+through your shell, with zero context cost when you're not using it.
 ```bash
-claude mcp add unity-agent-bridge -- dotnet "/abs/path/to/unity-agent-bridge/server/bin/Debug/net8.0/unity-agent-bridge-server.dll"
-```
-Use the built `.dll` shown above - not `dotnet run`, which corrupts the connection (you'd see 0 tools).
-
-**5. Use it - just ask Claude**
-```
-> read the unity console
-> create a cube named Player and add a Rigidbody to it
-> capture a screenshot of the scene
-```
-
-## Prefer the terminal? Use the CLI
-The same server is also a CLI - no agent needed. Install the command once:
-```bash
-cd server
+cd unity-agent-bridge/server
 dotnet pack -c Release
 dotnet tool install --global --add-source ./bin/Release unity-agent-bridge
 ```
@@ -70,8 +63,43 @@ unity-agent-bridge create_gameobject name=Cube primitive=Cube
 unity-agent-bridge list      # all tools and their parameters
 ```
 Values are sent as their JSON type (`{...}`, numbers, bools); everything else is a string.
-Once installed, you can also connect Claude Code with the short command:
+
+**5. Tell your agent to use the CLI**
+So the agent reaches for the CLI - and doesn't go hunting for an MCP server - drop this
+into your project's `CLAUDE.md`. It loads every session, so it sticks across new chats
+(memory does not - it's probabilistic and gets out-prioritised by any registered MCP
+server, which is why "use the CLI" never holds on its own):
+```markdown
+## Unity
+Drive the Unity Editor through the `unity-agent-bridge` CLI, run via the terminal:
+`unity-agent-bridge <tool> key=value ...`
+(e.g. `unity-agent-bridge create_gameobject name=Cube primitive=Cube`).
+Run `unity-agent-bridge list` to see every tool and its parameters.
+Do not look for or register an MCP server for Unity - the CLI is the interface.
+```
+
+**6. Use it - just ask**
+```
+> read the unity console
+> create a cube named Player and add a Rigidbody to it
+> capture a screenshot of the scene
+```
+
+## Optional: register as an MCP server
+Prefer native MCP tools over the CLI? The same binary is also an MCP stdio server. Build
+it and register with Claude Code:
+```bash
+cd unity-agent-bridge/server && dotnet build
+claude mcp add unity-agent-bridge -- dotnet "/abs/path/to/unity-agent-bridge/server/bin/Debug/net8.0/unity-agent-bridge-server.dll"
+```
+Use the built `.dll` shown above - not `dotnet run`, which corrupts the connection (you'd
+see 0 tools). If you installed the CLI in step 4, the short form works too:
 `claude mcp add unity-agent-bridge -- unity-agent-bridge`.
+
+Heads-up: a registered MCP server loads all ~50 tool schemas into **every** session
+(context cost even when Unity is idle), and once registered an agent will prefer those
+tools over the CLI. Pick one path - don't expect a `CLAUDE.md` note to steer the agent
+away from an MCP server you also registered.
 
 Daily use, extending it, and troubleshooting: [`GETTING-STARTED.md`](./GETTING-STARTED.md).
 

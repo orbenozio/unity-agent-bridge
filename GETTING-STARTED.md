@@ -20,12 +20,23 @@ unity-agent-bridge list      # every tool and its parameters
 ## Running two Editors at once
 Open a second Unity project and its bridge automatically grabs the next free port
 (17891, 17892, ...) - check the actual port in **Window > Unity Agent Bridge**. Each
-Editor keeps its own port and token, so two agent sessions never interfere. Register the
-second session's MCP server with the matching port:
+Editor keeps its own port and token, so two agent sessions never interfere.
+
+Because the port shifts, **don't hard-code it** - target each Editor by its project name
+and let the CLI discover the live port (each open Editor publishes it to
+`~/.unity-agent-bridge/projects/`):
 ```bash
-claude mcp add unity-b -e UNITY_BRIDGE_PORT=17891 -- dotnet ".../bin/Debug/net8.0/unity-agent-bridge-server.dll"
+unity-agent-bridge --project NeonRunner ping     # matches the project folder name
+unity-agent-bridge --project MyOtherGame list
 ```
-For the CLI, pass `--port 17891` (the window shows the exact command for its port).
+`--project` accepts the project folder name or a full/partial path; on an ambiguous match
+it lists the candidates so you can fall back to an explicit `--port N`. Precedence is
+`--port` > `--project` > `$UNITY_BRIDGE_PORT` > `$UNITY_BRIDGE_PROJECT` > default 17890.
+
+For an MCP server registration, pass the project (or a fixed port) via env:
+```bash
+claude mcp add unity-b -e UNITY_BRIDGE_PROJECT=NeonRunner -- dotnet ".../bin/Debug/net8.0/unity-agent-bridge-server.dll"
+```
 
 ## Extend it: your own tools and commands
 Two ways, both shareable between projects:
@@ -43,8 +54,10 @@ A fixed sequence of existing tools is a command; anything needing logic is a too
   moment - the server reconnects on its own. Just run the tool again.
 - **Still stuck?** Check `unity_status`, and the Auth/Client lines in
   **Window > Unity Agent Bridge**.
-- **Changed the port?** Set the same value via `UNITY_BRIDGE_PORT` in the `claude mcp add`
-  command (and pass `--port N` to the CLI).
+- **Port moved / can't connect?** The bridge auto-picks a free port, so don't assume
+  17890 - check the exact one in **Window > Unity Agent Bridge**. Rather than chase it,
+  target the Editor by name: `--project <name>` for the CLI, or `UNITY_BRIDGE_PROJECT` for
+  an MCP registration. Pin an explicit `--port N` / `UNITY_BRIDGE_PORT` only to override.
 
 ## Security
 Localhost-only, with a fail-closed handshake (auto-provisioned token + Host pinning +

@@ -13,9 +13,8 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Net;
-using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
@@ -65,6 +64,7 @@ namespace UnityAgentBridge.Editor
         {
             EditorApplication.update += Pump;
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeReload;
+            EditorApplication.quitting += BridgeDiscovery.Unpublish;
 
             ConsoleTools.Install();     // ring buffer must capture logs from load onward
             CompilationTools.Install();  // capture compile errors for the fix-loop tools
@@ -105,34 +105,39 @@ namespace UnityAgentBridge.Editor
         {
             try
             {
-                // Pick a free port starting at the configured one, so a SECOND Editor
-                // instance lands on the next port instead of silently failing to bind.
-                // The chosen port is persisted (per project) and shown in the window.
+                // Bind starting at the configured port, so a SECOND Editor instance lands
+                // on the next port instead of silently failing. The chosen port is
+                // persisted (per project) and shown in the window.
                 var desired = Port;
-                var port = FindFreePort(desired, 10);
-                if (port < 0)
+                var bound = BindListener(desired, 10);
+                if (bound == null)
                 {
                     IsListening = false;
                     Debug.LogError($"[McpBridge] no free port in {desired}-{desired + 9}; bridge not listening.");
                     return;
                 }
+                var (server, port) = bound.Value;
                 if (port != desired)
                 {
                     Port = port; // remember this project's port for next launch
                     Debug.Log($"[McpBridge] port {desired} was busy; using {port} for this project.");
                 }
 
-                // Provision the shared-secret token BEFORE listening, so the server can
-                // read it the moment it connects. Auth is on by default. Capture
-                // port/token HERE on the main thread: the Authorize delegate runs on the
-                // accept (background) thread, where EditorUserSettings would throw.
+                // Provision the shared-secret token and wire the auth gate BEFORE we begin
+                // accepting, so the very first client is served with auth in place (a
+                // connection that raced in during bind waits in the OS backlog until now).
+                // Capture port/token HERE on the main thread: the Authorize delegate runs on
+                // the accept (background) thread, where EditorUserSettings would throw.
                 var token = BridgeAuth.EnsureToken(port);
+                server.OnMessage += HandleMessage;
+                server.Authorize = headers => BridgeAuth.Validate(headers, token, Host, port);
+                server.BeginAccept();
 
-                _server = new WebSocketServer(Host, port);
-                _server.OnMessage += HandleMessage;
-                _server.Authorize = headers => BridgeAuth.Validate(headers, token, Host, port);
-                _server.Start();
+                _server = server;
                 IsListening = true;
+                // Publish the live port so a CLI/MCP client can discover it by --project
+                // instead of hard-coding it - essential when several Editors run at once.
+                BridgeDiscovery.Publish(port);
                 Debug.Log($"[McpBridge] listening on ws://{Host}:{port} (auth on; token at {BridgeAuth.TokenPath(port)})");
             }
             catch (Exception e)
@@ -142,26 +147,27 @@ namespace UnityAgentBridge.Editor
             }
         }
 
-        // Probe for a free TCP port: try `start`, then the next ports up to `tries`
-        // candidates, returning the first that binds (then releases it), or -1 if none
-        // are free. This is what lets multiple Editor instances coexist - each grabs its
-        // own port instead of colliding on the default.
-        private static int FindFreePort(int start, int tries)
+        // Bind the REAL listener on `desired`, retrying THAT port briefly before climbing.
+        // Binding the real socket once (no separate probe-then-rebind) removes the TOCTOU
+        // gap where the port was grabbed between the probe and the bind - the failure that
+        // left the bridge dead on EADDRINUSE. The short retry on the desired port reclaims
+        // our OWN previous-domain listener while it finishes releasing after a reload, so we
+        // keep the SAME port instead of migrating; a port a DIFFERENT process holds stays
+        // busy through the whole retry window and makes us climb (multi-Editor coexistence).
+        private static (WebSocketServer server, int port)? BindListener(int desired, int tries)
         {
-            for (int p = start; p < start + tries && p <= 65535; p++)
+            for (int p = desired; p < desired + tries && p <= 65535; p++)
             {
                 if (p < 1024) continue;
-                TcpListener probe = null;
-                try
+                int attempts = (p == desired) ? 8 : 1; // reclaim our own port; don't stall climbing
+                for (int a = 0; a < attempts; a++)
                 {
-                    probe = new TcpListener(IPAddress.Parse(Host), p);
-                    probe.Start();
-                    return p; // bound -> free
+                    var server = new WebSocketServer(Host, p);
+                    if (server.TryBind()) return (server, p);
+                    if (a + 1 < attempts) Thread.Sleep(60); // ~0.5s max, only when the port is contended
                 }
-                catch (SocketException) { /* in use -> next */ }
-                finally { probe?.Stop(); }
             }
-            return -1;
+            return null;
         }
 
         public static void Stop()

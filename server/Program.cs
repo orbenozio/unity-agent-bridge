@@ -20,9 +20,19 @@ var builder = Host.CreateApplicationBuilder(args);
 // stdout belongs to the MCP transport - route all logging to stderr.
 builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
 
-var port = int.TryParse(Environment.GetEnvironmentVariable("UNITY_BRIDGE_PORT"), out var p)
-    ? p
-    : UnityClient.DefaultPort;
+// Port precedence: $UNITY_BRIDGE_PORT > $UNITY_BRIDGE_PROJECT discovery > default. The
+// project form lets a client follow one Editor's port across restarts when several run.
+int port = UnityClient.DefaultPort;
+if (int.TryParse(Environment.GetEnvironmentVariable("UNITY_BRIDGE_PORT"), out var envPort))
+{
+    port = envPort;
+}
+else if (Environment.GetEnvironmentVariable("UNITY_BRIDGE_PROJECT") is { Length: > 0 } proj)
+{
+    var matches = BridgeDiscovery.Match(proj);
+    if (matches.Count == 1) port = matches[0].Port;
+    else Console.Error.WriteLine($"[unity-agent-bridge] UNITY_BRIDGE_PROJECT='{proj}' matched {matches.Count} bridges; using port {port}.");
+}
 builder.Services.AddSingleton(_ => new UnityClient(port));
 
 builder.Services

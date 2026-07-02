@@ -62,22 +62,72 @@ namespace UnityAgentBridge.Editor
             _port = port;
         }
 
-        public void Start()
+        /// <summary>
+        /// Reserve the port WITHOUT yet accepting connections. Returns false (instead of
+        /// throwing) if the port is already bound, so the caller can climb to the next
+        /// one. Split from accept so McpBridge can wire the auth gate + provision the
+        /// token BEFORE the first client is served - a connection that arrives between
+        /// bind and <see cref="BeginAccept"/> simply waits in the OS accept backlog.
+        /// </summary>
+        public bool TryBind()
         {
-            if (_running) return;
+            if (_running) return true;
+            TcpListener listener = null;
+            try
+            {
+                listener = new TcpListener(IPAddress.Parse(_host), _port);
+                // Exclusive bind: a port a DIFFERENT Editor already holds must read as busy
+                // so the caller climbs to the next one (multi-Editor coexistence). Our OWN
+                // previous listener is closed deterministically in Stop() before a reload,
+                // so reclaiming the same port across a reload still succeeds.
+                listener.ExclusiveAddressUse = true;
+                listener.Start();
+            }
+            catch (SocketException)
+            {
+                try { listener?.Stop(); } catch { /* ignore */ }
+                return false;
+            }
+            _listener = listener;
             _running = true;
-            _listener = new TcpListener(IPAddress.Parse(_host), _port);
-            _listener.Start();
+            return true;
+        }
+
+        /// <summary>Start accepting connections. Call after <see cref="TryBind"/> succeeds.</summary>
+        public void BeginAccept()
+        {
+            if (_acceptThread != null) return;
             _acceptThread = new Thread(AcceptLoop) { IsBackground = true, Name = "McpBridge-Accept" };
             _acceptThread.Start();
+        }
+
+        /// <summary>Bind + accept in one call. Throws if the port is already in use.</summary>
+        public void Start()
+        {
+            if (!TryBind())
+                throw new SocketException((int)SocketError.AddressAlreadyInUse);
+            BeginAccept();
         }
 
         public void Stop()
         {
             _running = false;
-            try { _listener?.Stop(); } catch { /* ignore */ }
+            var listener = _listener;
+            var accept = _acceptThread;
+            try { listener?.Stop(); } catch { /* ignore */ }
             CloseClient();
             _listener = null;
+
+            // Wait for the accept loop to observe the stopped listener and exit, so the OS
+            // socket is fully released before we return. This is what lets the NEXT domain
+            // (after a script-recompile reload) re-bind the SAME port instead of finding it
+            // still held and climbing to a new one - the bug that made a CLI pinned to a
+            // fixed port lose the bridge after every refresh_assets.
+            if (accept != null && accept.IsAlive && accept != Thread.CurrentThread)
+            {
+                try { accept.Join(250); } catch { /* ignore */ }
+            }
+            _acceptThread = null;
         }
 
         private void AcceptLoop()

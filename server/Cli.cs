@@ -17,7 +17,9 @@ internal static class Cli
 {
     public static async Task<int> RunAsync(string[] args)
     {
-        int port = EnvPort();
+        int port = UnityClient.DefaultPort;
+        bool portExplicit = false;
+        string? project = null;
         var positional = new List<string>();
         var toolArgs = new Dictionary<string, object?>();
 
@@ -25,7 +27,8 @@ internal static class Cli
         {
             var a = args[i];
             if (a is "--help" or "-h") { PrintHelp(); return 0; }
-            if (a == "--port") { port = int.Parse(args[++i]); continue; }
+            if (a == "--port") { port = int.Parse(args[++i]); portExplicit = true; continue; }
+            if (a == "--project") { project = args[++i]; continue; }
 
             var eq = a.IndexOf('=');
             if (eq > 0) toolArgs[a[..eq]] = ParseValue(a[(eq + 1)..]);
@@ -34,6 +37,38 @@ internal static class Cli
 
         if (positional.Count == 0) { PrintHelp(); return 0; }
         var tool = positional[0];
+
+        // Resolve the port. Precedence: --port (explicit) > --project discovery >
+        // $UNITY_BRIDGE_PORT > $UNITY_BRIDGE_PROJECT discovery > default. Discovery lets a
+        // wrapper target a project by name and follow its port across restarts, which is
+        // what a fixed port can't do when several Editors run at once.
+        if (!portExplicit)
+        {
+            var proj = project ?? Environment.GetEnvironmentVariable("UNITY_BRIDGE_PROJECT");
+            if (project == null && int.TryParse(Environment.GetEnvironmentVariable("UNITY_BRIDGE_PORT"), out var envPort))
+            {
+                port = envPort;
+            }
+            else if (!string.IsNullOrEmpty(proj))
+            {
+                var matches = BridgeDiscovery.Match(proj);
+                if (matches.Count == 1)
+                {
+                    port = matches[0].Port;
+                }
+                else if (matches.Count == 0)
+                {
+                    Console.Error.WriteLine($"error: no running bridge found for project '{proj}' - is that Editor open? " +
+                        $"(falling back to port {port})");
+                }
+                else
+                {
+                    Console.Error.WriteLine($"error: '{proj}' matches {matches.Count} bridges: " +
+                        string.Join(", ", matches.Select(m => $"{m.Name}:{m.Port}")) + ". Use --port to disambiguate.");
+                    return 1;
+                }
+            }
+        }
 
         await using var client = new UnityClient(port);
         try
@@ -57,12 +92,6 @@ internal static class Cli
             Console.Error.WriteLine("error: " + e.Message);
             return 1;
         }
-    }
-
-    private static int EnvPort()
-    {
-        var v = Environment.GetEnvironmentVariable("UNITY_BRIDGE_PORT");
-        return int.TryParse(v, out var p) ? p : UnityClient.DefaultPort;
     }
 
     // Scalars are passed as their JSON type; {...}/[...] are parsed as JSON; else string.
@@ -163,12 +192,13 @@ internal static class Cli
 @"unity-agent-bridge - CLI for the Unity MCP bridge
 
 USAGE
-  unity-agent-bridge [--port N] <tool> [key=value ...]
-  unity-agent-bridge [--port N] list           list every tool and its parameters
+  unity-agent-bridge [--port N | --project NAME] <tool> [key=value ...]
+  unity-agent-bridge [--port N | --project NAME] list   list every tool and its parameters
   unity-agent-bridge --help
 
 EXAMPLES
   unity-agent-bridge ping
+  unity-agent-bridge --project NeonRunner ping
   unity-agent-bridge create_gameobject name=Cube primitive=Cube
   unity-agent-bridge add_component target=Cube componentType=Rigidbody
   unity-agent-bridge set_property target=Cube componentType=Image property=color value={""r"":0,""g"":1,""b"":0,""a"":1}
@@ -180,7 +210,9 @@ NOTES
     else is a string.
   - Array params take a comma list (levels=Error,Warning), a single value (levels=Error),
     or JSON (levels=[""Error""]) - the CLI splits them using the tool's schema.
-  - Port defaults to 17890, or $UNITY_BRIDGE_PORT, or --port.
+  - Port resolution: --port > --project (discovers the port a running Editor published,
+    matching NAME by project folder or path) > $UNITY_BRIDGE_PORT > $UNITY_BRIDGE_PROJECT
+    > default 17890. Use --project when several Editors run at once - each has its own port.
   - With NO arguments the same binary runs as an MCP stdio server (for Claude Code).");
     }
 }
